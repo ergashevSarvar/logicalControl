@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: logical-control-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/logical_control
+    username: postgres
+    password: 00229005
+  threads:
+    virtual:
+      enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: Asia/Tashkent
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  jwt:
+    issuer: logical-control
+    secret: logical-control-super-secure-jwt-secret-key-2026-change-me
+    access-token-expiration-minutes: 720
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://127.0.0.1:5173
