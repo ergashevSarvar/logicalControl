@@ -1,7 +1,7 @@
 export const resources = {
   uzLatn: {
     translation: {
-      appName: "Logical Control",
+      appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Bosh sahifa",
         controls: "MN Ro'yxati",
@@ -72,7 +72,7 @@ export const resources = {
   },
   uzCyrl: {
     translation: {
-      appName: "Logical Control",
+      appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Бош саҳифа",
         controls: "MN Рўйхати",
@@ -143,7 +143,7 @@ export const resources = {
   },
   ru: {
     translation: {
-      appName: "Logical Control",
+      appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Главная",
         controls: "Список MN",
@@ -214,7 +214,7 @@ export const resources = {
   },
   en: {
     translation: {
-      appName: "Logical Control",
+      appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Dashboard",
         controls: "MN List",

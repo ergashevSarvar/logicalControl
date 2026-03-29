@@ -2,7 +2,7 @@ import { useDeferredValue, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, PencilLine, Plus, Route } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "@/components/common/page-header";

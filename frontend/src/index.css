@@ -72,7 +72,7 @@
     --chart-3: oklch(0.75 0.14 150);
     --chart-4: oklch(0.76 0.14 80);
     --chart-5: oklch(0.63 0.18 20);
-    --radius: 1rem;
+    --radius: 0.75rem;
     --sidebar: oklch(0.97 0.008 250);
     --sidebar-foreground: oklch(0.24 0.02 250);
     --sidebar-primary: oklch(0.59 0.2 253);
@@ -198,6 +198,14 @@
   ::selection {
     background: color-mix(in srgb, var(--primary) 30%, transparent);
   }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 .react-flow__attribution {
@@ -211,4 +219,57 @@
 
 .react-flow__minimap {
   background: color-mix(in srgb, var(--card) 96%, transparent);
+}
+
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 24%, transparent) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--primary) 22%, white);
+}
+
+.Toastify__toast-container {
+  width: min(360px, calc(100vw - 2rem));
+}
+
+.app-toast {
+  min-height: 68px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, white 16%);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top left, rgba(var(--primary-rgb), 0.14), transparent 42%),
+    color-mix(in srgb, var(--card) 92%, white 8%);
+  box-shadow: 0 20px 50px -28px rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(18px);
+  color: var(--foreground);
+}
+
+.app-toast .Toastify__toast-body {
+  padding: 0.2rem 0.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.app-toast-progress {
+  background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 42%, white));
+}
+
+.Toastify__close-button {
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
+
+.Toastify__close-button:hover {
+  opacity: 1;
 }

@@ -41,7 +41,14 @@ cd backend
 
 API default manzil:
 
-- `http://localhost:8080/api`
+- `http://localhost:8070/api`
+
+Agar `8070` port band bo'lsa:
+
+```powershell
+$env:SERVER_PORT=8071
+.\gradlew.bat bootRun
+```
 
 ## Frontendni ishga tushirish
 

@@ -2,8 +2,9 @@ import { startTransition, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ShieldCheck, Workflow, ChartSpline } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 
+import { AppLogo } from "@/components/common/app-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,9 +49,14 @@ export function LoginPage() {
       <div className="relative mx-auto grid min-h-[calc(100vh-3rem)] max-w-7xl items-center gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="space-y-6 rounded-[40px] border border-border/60 bg-card/70 p-8 shadow-2xl shadow-primary/10 backdrop-blur md:p-10">
           <div className="space-y-4">
-            <p className="inline-flex rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
-              Logical Control Platform
-            </p>
+            <AppLogo
+              className="rounded-[24px] border border-primary/20 bg-background/70 px-3 py-2"
+              imageClassName="size-12"
+              title="Mantiqiy nazorat platformasi"
+              subtitle="Enterprise rule orchestration workspace"
+              titleClassName="text-sm font-semibold uppercase tracking-[0.22em] text-primary"
+              subtitleClassName="text-xs"
+            />
             <div className="space-y-3">
               <h1 className="max-w-2xl text-4xl font-semibold tracking-tight md:text-6xl">{t("login.title")}</h1>
               <p className="max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">{t("login.description")}</p>

@@ -171,10 +171,10 @@ export interface LogsResponse {
 }
 
 export const localeLabels: Record<LocaleCode, string> = {
-  uzCyrl: "UZBEK",
-  uzLatn: "O'ZBEK",
-  ru: "RUS",
-  en: "ENGLISH",
+  uzCyrl: "Ўзбек",
+  uzLatn: "O'zbek",
+  ru: "Русский",
+  en: "English",
 };
 
 export const paletteOptions: Array<{ value: PaletteName; label: string; hint: string }> = [

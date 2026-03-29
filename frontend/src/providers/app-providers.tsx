@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
-import { Toaster } from "sonner";
+import { useTheme } from "next-themes";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 import { AuthProvider } from "@/providers/auth-provider";
 import { PaletteProvider } from "@/providers/palette-provider";
@@ -15,6 +17,24 @@ const queryClient = new QueryClient({
   },
 });
 
+function AppToastContainer() {
+  const { resolvedTheme } = useTheme();
+
+  return (
+    <ToastContainer
+      position="top-right"
+      autoClose={2800}
+      newestOnTop
+      closeOnClick
+      pauseOnHover
+      draggable
+      theme={resolvedTheme === "dark" ? "dark" : "light"}
+      toastClassName="app-toast"
+      progressClassName="app-toast-progress"
+    />
+  );
+}
+
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
@@ -22,7 +42,7 @@ export function AppProviders({ children }: PropsWithChildren) {
         <PaletteProvider>
           <AuthProvider>
             {children}
-            <Toaster richColors position="top-right" />
+            <AppToastContainer />
           </AuthProvider>
         </PaletteProvider>
       </ThemeProvider>

@@ -2,7 +2,7 @@ import { startTransition, useEffect, type ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "@/components/common/page-header";

@@ -1,81 +1,198 @@
-import { LayoutDashboard, ListChecks, PlusSquare, Route, ScrollText } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  PlusSquare,
+  Route,
+  ScrollText,
+} from "lucide-react";
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
+import { AppLogo } from "@/components/common/app-logo";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 const items = [
-  { to: "/", icon: LayoutDashboard, key: "dashboard", accent: "Live" },
-  { to: "/controls", icon: ListChecks, key: "controls", accent: "MN" },
-  { to: "/controls/new", icon: PlusSquare, key: "create", accent: "New" },
-  { to: "/builder", icon: Route, key: "builder", accent: "Flow" },
-  { to: "/logs", icon: ScrollText, key: "logs", accent: "Audit" },
+  { to: "/", icon: LayoutDashboard, key: "dashboard" },
+  { to: "/controls", icon: ListChecks, key: "controls" },
+  { to: "/controls/new", icon: PlusSquare, key: "create" },
+  { to: "/builder", icon: Route, key: "builder" },
+  { to: "/logs", icon: ScrollText, key: "logs" },
 ] as const;
 
-export function AppSidebar() {
+type AppSidebarProps = {
+  expanded: boolean;
+  onToggle: () => void;
+};
+
+export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
   const { t } = useTranslation();
+  const { logout } = useAuth();
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
 
   return (
-    <aside className="flex h-full flex-col gap-6 bg-sidebar px-4 py-5 text-sidebar-foreground">
-      <div className="rounded-[26px] border border-sidebar-border/80 bg-sidebar-primary/8 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-sidebar-foreground/55">Control</p>
-            <h2 className="mt-3 text-xl font-semibold">{t("appName")}</h2>
-            <p className="mt-2 text-sm text-sidebar-foreground/70">MN life-cycle, builder, logs va dashboard bir joyda.</p>
-          </div>
-          <Badge className="h-7 rounded-full bg-sidebar-primary text-sidebar-primary-foreground">v4</Badge>
-        </div>
-      </div>
-
-      <nav className="space-y-2">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center justify-between rounded-[22px] border px-3 py-3 transition-all",
-                  isActive
-                    ? "border-sidebar-primary/35 bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-sidebar-primary/20"
-                    : "border-transparent bg-transparent text-sidebar-foreground/80 hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                )
-              }
+    <>
+      <aside
+        className={cn(
+          "fixed inset-y-3 left-3 z-40 hidden transition-[width] duration-300 ease-out lg:flex",
+          expanded ? "w-[15rem]" : "w-[4.75rem]",
+        )}
+      >
+        <div className="relative flex h-full w-full flex-col rounded-[28px] border border-white/62 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,250,255,0.9))] px-3 py-4 text-sidebar-foreground shadow-[0_24px_60px_-34px_rgba(15,23,42,0.22)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(25,31,43,0.72),rgba(20,26,37,0.62))]">
+        <div className={cn("flex items-start", expanded ? "justify-between gap-2" : "justify-center")}>
+          {expanded ? (
+            <div className="w-full rounded-[22px] border border-white/45 bg-white/42 px-3 py-3 shadow-[0_18px_34px_-26px_rgba(15,23,42,0.3)] backdrop-blur-lg dark:border-white/10 dark:bg-white/6">
+              <div className="flex items-center gap-2.5">
+                <AppLogo
+                  showText={false}
+                  imageClassName="size-11"
+                  frameClassName="rounded-[16px] bg-transparent"
+                />
+                <div className="min-w-0">
+                  <p className="text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-primary/75">
+                    Mantiqiy
+                  </p>
+                  <p className="mt-0.5 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-primary/75">
+                    Nazorat
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onToggle}
+              className="h-auto rounded-[24px] bg-transparent p-0 hover:bg-transparent"
             >
-              {({ isActive }) => (
-                <>
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "flex size-10 items-center justify-center rounded-2xl border",
-                        isActive ? "border-white/15 bg-white/10" : "border-sidebar-border/70 bg-sidebar-accent/50",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{t(`nav.${item.key}`)}</p>
-                      <p className="text-xs text-current/70">{item.accent}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold uppercase tracking-[0.22em] text-current/70">{String(items.indexOf(item) + 1).padStart(2, "0")}</span>
-                </>
-              )}
-            </NavLink>
-          );
-        })}
-      </nav>
+              <AppLogo
+                showText={false}
+                imageClassName="size-11"
+                frameClassName="rounded-[18px] bg-transparent"
+              />
+              <span className="sr-only">Expand sidebar</span>
+            </Button>
+          )}
+        </div>
 
-      <div className="mt-auto rounded-[24px] border border-sidebar-border/80 bg-sidebar-accent/80 p-4 text-sidebar-accent-foreground">
-        <p className="text-xs uppercase tracking-[0.28em] text-sidebar-accent-foreground/55">Best practice</p>
-        <p className="mt-3 text-sm leading-6">
-          Critical MNlar uchun avval builder orqali oqimni tekshirib, keyin aktiv holatga o'tkazing.
-        </p>
-      </div>
-    </aside>
+        <div className="my-4 h-px bg-sidebar-border/55" />
+
+        <nav className="sidebar-scroll flex-1 overflow-y-auto pr-0.5">
+          <div className={cn(expanded ? "space-y-2" : "space-y-3")}>
+            {items.map((item) => {
+              const Icon = item.icon;
+              const label = t(`nav.${item.key}`);
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/"}
+                  title={!expanded ? label : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      "group relative flex transition-all duration-200",
+                      expanded
+                        ? "h-12 items-center gap-3 overflow-hidden rounded-[14px] border px-3.5"
+                        : "mx-auto size-12 items-center justify-center rounded-full border",
+                      isActive
+                        ? expanded
+                          ? "border-[color:rgba(var(--primary-rgb),0.18)] bg-[linear-gradient(90deg,rgba(var(--primary-rgb),0.14),rgba(var(--accent-rgb),0.08))] text-primary shadow-[0_12px_24px_-22px_rgba(var(--primary-rgb),0.3)]"
+                          : "border-primary/20 bg-primary text-primary-foreground shadow-[0_16px_30px_-18px_rgba(var(--primary-rgb),0.95)]"
+                        : expanded
+                          ? "border-[color:rgba(var(--primary-rgb),0.08)] bg-[color:rgba(var(--primary-rgb),0.055)] text-sidebar-foreground shadow-[0_12px_26px_-22px_rgba(15,23,42,0.18)] backdrop-blur-lg hover:border-[color:rgba(var(--primary-rgb),0.16)] hover:bg-[color:rgba(var(--primary-rgb),0.09)] dark:border-white/10 dark:bg-white/7 dark:hover:bg-white/11"
+                          : "border-white/45 bg-white/46 text-sidebar-foreground shadow-[0_12px_26px_-22px_rgba(15,23,42,0.28)] backdrop-blur-lg hover:border-primary/16 hover:bg-white/62 dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10",
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {expanded && isActive ? (
+                        <span className="absolute inset-y-0 left-0 w-[6px] rounded-r-[10px] bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.96),rgba(var(--accent-rgb),0.76))] shadow-[0_0_16px_rgba(var(--primary-rgb),0.34)]" />
+                      ) : null}
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center justify-center",
+                          expanded ? "size-8 rounded-[10px]" : "size-12 rounded-full",
+                          isActive
+                            ? expanded
+                              ? "bg-primary/10 text-primary"
+                              : "bg-white/15 text-current"
+                            : "bg-transparent text-sidebar-foreground/80 group-hover:text-sidebar-foreground dark:text-sidebar-foreground/85",
+                        )}
+                      >
+                        <Icon className="size-5" />
+                      </div>
+
+                      {expanded ? <span className="truncate text-sm font-medium">{label}</span> : null}
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        </nav>
+
+        <div className="mt-4 h-px bg-sidebar-border/55" />
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setIsLogoutDialogOpen(true)}
+            title={!expanded ? t("common.logout") : undefined}
+            className={cn(
+              "mt-4 border border-red-200/75 bg-red-50/86 text-red-500 shadow-[0_14px_24px_-20px_rgba(239,68,68,0.32)] backdrop-blur-lg hover:bg-red-100 hover:text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/16",
+              expanded ? "h-12 w-full justify-start rounded-[18px] px-3.5" : "mx-auto size-12 rounded-full p-0",
+            )}
+          >
+            <LogOut className="size-5" />
+            {expanded ? <span>{t("common.logout")}</span> : null}
+          </Button>
+        </div>
+      </aside>
+
+      {isLogoutDialogOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/28 p-4 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsLogoutDialogOpen(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-[28px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,249,255,0.92))] p-6 shadow-[0_28px_70px_-30px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(26,33,46,0.96),rgba(20,26,37,0.92))]">
+            <div className="flex size-12 items-center justify-center rounded-[18px] bg-red-500/10 text-red-500 dark:bg-red-500/14 dark:text-red-300">
+              <LogOut className="size-5" />
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <h3 className="text-xl font-semibold text-foreground">Tizimdan chiqishni tasdiqlaysizmi?</h3>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Joriy sessiya yakunlanadi va siz login sahifasiga qaytasiz.
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setIsLogoutDialogOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setIsLogoutDialogOpen(false);
+                  logout();
+                }}
+                className="bg-red-500 text-white hover:bg-red-600 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
+              >
+                {t("common.logout")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -4,19 +4,24 @@ import { initReactI18next } from "react-i18next";
 
 import { resources } from "@/i18n/resources";
 
+const languageKey = "logical-control.language";
+const defaultLanguage = "uzLatn";
+
 void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources,
-    fallbackLng: "uzLatn",
+    lng: window.localStorage.getItem(languageKey) ?? defaultLanguage,
+    fallbackLng: defaultLanguage,
     supportedLngs: ["uzCyrl", "uzLatn", "ru", "en"],
     interpolation: {
       escapeValue: false,
     },
     detection: {
-      order: ["localStorage", "navigator"],
-      lookupLocalStorage: "logical-control.language",
+      order: ["localStorage"],
+      lookupLocalStorage: languageKey,
+      caches: ["localStorage"],
     },
   });
 

@@ -11,7 +11,7 @@ import type {
   UserProfile,
 } from "@/lib/types";
 
-const baseURL = import.meta.env.VITE_API_URL ?? "http://localhost:8080/api";
+const baseURL = import.meta.env.VITE_API_URL ?? "http://localhost:8070/api";
 const tokenKey = "logical-control.token";
 
 export const api = axios.create({
