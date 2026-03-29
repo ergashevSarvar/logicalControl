@@ -21,6 +21,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { createControl, fetchControl, updateControl } from "@/lib/api";
 import { controlDetailToRequest, createDefaultControlRequest, createDefaultRule, type ControlRequest, type ControlRule, type RuleType } from "@/lib/types";
 
+function areCanvasStatesEqual(left: Record<string, unknown>, right: Record<string, unknown>) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function RuleBuilderPage() {
   const navigate = useNavigate();
   const params = useParams();
@@ -91,7 +95,13 @@ export function RuleBuilderPage() {
 
       <RuleCanvasEditor
         canvas={draft.ruleBuilderCanvas}
-        onCanvasChange={(ruleBuilderCanvas) => setDraft((current) => ({ ...current, ruleBuilderCanvas }))}
+        onCanvasChange={(ruleBuilderCanvas) =>
+          setDraft((current) =>
+            areCanvasStatesEqual(current.ruleBuilderCanvas, ruleBuilderCanvas)
+              ? current
+              : { ...current, ruleBuilderCanvas }
+          )
+        }
         onRuleAdd={addRule}
       />
 

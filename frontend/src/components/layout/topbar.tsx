@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 
 import { RU, US, UZ } from "country-flag-icons/react/3x2";
-import { Bell, ChevronDown, LogOut, Menu, Monitor, Moon, Palette, Search, SunMedium, User } from "lucide-react";
+import { Bell, ChevronDown, Clock3, LogOut, Menu, Monitor, Moon, Palette, Search, SunMedium, User, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "next-themes";
 import { toast } from "react-toastify";
@@ -11,6 +11,7 @@ import defaultAvatar from "@/assets/default-avatar.svg";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LANGUAGE_STORAGE_KEY } from "@/i18n";
 import { localeLabels, paletteOptions, type LocaleCode, type PaletteName, type ThemeMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -42,6 +43,26 @@ const themeOptions: Array<{ value: ThemeMode; icon: typeof SunMedium; label: str
   { value: "dark", icon: Moon, label: "Dark" },
   { value: "system", icon: Monitor, label: "System" },
 ];
+const RECENT_SEARCHES_KEY = "logical-control.recent-searches";
+const MAX_RECENT_SEARCHES = 7;
+const SEARCH_PLACEHOLDER_POOL = [
+  "Ruxsatnoma muddati nazorati",
+  "Risk toifasi ogohlantirishi",
+  "Transport mosligi tekshiruvi",
+  "Qabul qiluvchi istisnolari",
+  "Avto bekor qilish muddati",
+  "Deklaratsiya qiymati nazorati",
+  "Broker faolligi monitoringi",
+  "Yuk kodi verifikatsiyasi",
+  "Hududiy post cheklovi",
+  "Import limiti tekshiruvi",
+] as const;
+
+function pickRandomSearchHints(count: number) {
+  return [...SEARCH_PLACEHOLDER_POOL]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, count);
+}
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
@@ -66,9 +87,24 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
   const { palette, setPalette } = usePalette();
   const { user, logout } = useAuth();
   const [now, setNow] = useState(() => new Date());
+  const [searchValue, setSearchValue] = useState("");
+  const [searchHints] = useState(() => pickRandomSearchHints(5));
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [placeholderLength, setPlaceholderLength] = useState(0);
+  const [isDeletingPlaceholder, setIsDeletingPlaceholder] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(RECENT_SEARCHES_KEY);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLDivElement | null>(null);
   const currentLocale = (i18n.language in localeLabels ? i18n.language : "uzLatn") as LocaleCode;
   const CurrentFlag = languageFlags[currentLocale];
   const currentLocaleLabel = localeLabels[currentLocale];
@@ -81,6 +117,10 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setIsSearchOpen(false);
+      }
+
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
       }
@@ -101,6 +141,61 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
     "h-11 rounded-[16px] border border-white/60 bg-[color:rgba(var(--primary-rgb),0.06)] shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-white/8";
   const chromeTriggerClass =
     "h-11 rounded-[14px] border-transparent bg-transparent px-2.5 shadow-none hover:bg-white/50 dark:hover:bg-white/10";
+  const activeSearchHint = searchHints[placeholderIndex] ?? `${t("common.search")}...`;
+  const animatedSearchHint = activeSearchHint.slice(0, placeholderLength);
+
+  function persistRecentSearches(nextSearches: string[]) {
+    setRecentSearches(nextSearches);
+    window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(nextSearches));
+  }
+
+  function commitSearch(rawValue: string) {
+    const normalized = rawValue.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const nextSearches = [
+      normalized,
+      ...recentSearches.filter((item) => item.toLocaleLowerCase() !== normalized.toLocaleLowerCase()),
+    ].slice(0, MAX_RECENT_SEARCHES);
+
+    persistRecentSearches(nextSearches);
+    setSearchValue(normalized);
+    setIsSearchOpen(true);
+  }
+
+  function removeRecentSearch(value: string) {
+    persistRecentSearches(recentSearches.filter((item) => item !== value));
+  }
+
+  useEffect(() => {
+    if (searchValue || searchHints.length === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (!isDeletingPlaceholder && placeholderLength < activeSearchHint.length) {
+        setPlaceholderLength((current) => current + 1);
+        return;
+      }
+
+      if (!isDeletingPlaceholder && placeholderLength === activeSearchHint.length) {
+        setIsDeletingPlaceholder(true);
+        return;
+      }
+
+      if (isDeletingPlaceholder && placeholderLength > 0) {
+        setPlaceholderLength((current) => current - 1);
+        return;
+      }
+
+      setIsDeletingPlaceholder(false);
+      setPlaceholderIndex((current) => (current + 1) % searchHints.length);
+    }, !isDeletingPlaceholder && placeholderLength === activeSearchHint.length ? 1500 : isDeletingPlaceholder ? 45 : 75);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeSearchHint, isDeletingPlaceholder, placeholderLength, searchHints, searchValue]);
 
   return (
     <header className="sticky top-3 z-30 rounded-[28px] border border-white/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(245,249,255,0.62))] px-5 py-3 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.24)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(25,31,43,0.84),rgba(20,26,37,0.8))]">
@@ -123,13 +218,88 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
           </div>
         </div>
 
-        <div className="relative xl:max-w-sm xl:flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder={`${t("common.search")}...`}
-            className="h-11 rounded-[16px] border-white/60 bg-[color:rgba(var(--primary-rgb),0.045)] pr-4 pl-11 shadow-sm placeholder:text-slate-500 dark:border-white/10 dark:bg-white/8 dark:placeholder:text-slate-400"
-          />
+        <div ref={searchRef} className="relative xl:max-w-[28rem] xl:flex-1">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              commitSearch(searchValue);
+            }}
+            className="relative"
+          >
+            <Search className="pointer-events-none absolute top-1/2 left-5 size-4.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={searchValue}
+              placeholder=""
+              onChange={(event) => setSearchValue(event.target.value)}
+              onFocus={() => setIsSearchOpen(true)}
+              className="h-13 rounded-[18px] border-white/60 bg-[color:rgba(var(--primary-rgb),0.05)] pr-14 pl-13 text-sm shadow-[0_14px_30px_-24px_rgba(15,23,42,0.28)] placeholder:text-slate-500 dark:border-white/10 dark:bg-white/8 dark:placeholder:text-slate-400"
+            />
+            {!searchValue ? (
+              <div className="pointer-events-none absolute inset-y-0 left-13 right-14 flex items-center overflow-hidden">
+                <span className="truncate text-sm text-slate-500 dark:text-slate-400">
+                  {animatedSearchHint || `${t("common.search")}...`}
+                  <span className="ml-0.5 inline-block animate-pulse text-primary">|</span>
+                </span>
+              </div>
+            ) : null}
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 right-2 size-9 -translate-y-1/2 rounded-[14px] bg-white/66 text-muted-foreground shadow-sm hover:bg-white dark:bg-white/8 dark:hover:bg-white/12"
+              aria-label="Qidirish"
+            >
+              <Search className="size-4" />
+            </Button>
+          </form>
+
+          {isSearchOpen && recentSearches.length > 0 ? (
+            <div className="absolute top-[calc(100%+0.75rem)] left-0 z-40 w-full overflow-hidden rounded-[22px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(247,250,255,0.95))] shadow-[0_26px_56px_-32px_rgba(15,23,42,0.34)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(26,33,46,0.96),rgba(20,26,37,0.94))]">
+              <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">Yaqinda qidirilganlar</p>
+                <button
+                  type="button"
+                  onClick={() => persistRecentSearches([])}
+                  className="text-sm font-medium text-primary transition hover:text-primary/80"
+                >
+                  Tozalash
+                </button>
+              </div>
+
+              <div className="max-h-[22rem] overflow-y-auto p-2">
+                {recentSearches.slice(0, MAX_RECENT_SEARCHES).map((item) => (
+                  <div
+                    key={item}
+                    className="group flex items-center gap-3 rounded-[18px] px-3 py-3 transition hover:bg-black/[0.03] dark:hover:bg-white/6"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchValue(item);
+                        commitSearch(item);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/70 text-muted-foreground">
+                        <Clock3 className="size-4" />
+                      </div>
+                      <span className="truncate text-sm font-medium text-foreground">{item}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => removeRecentSearch(item)}
+                      className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/8"
+                      aria-label={`${item} ni o'chirish`}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -139,7 +309,17 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
           </div>
 
           <div className={cn("flex items-center px-1.5", chromeBlockClass)}>
-            <Select value={i18n.language} onValueChange={(value) => value && i18n.changeLanguage(value)}>
+            <Select
+              value={i18n.language}
+              onValueChange={(value) => {
+                if (!value) {
+                  return;
+                }
+
+                window.localStorage.setItem(LANGUAGE_STORAGE_KEY, value);
+                void i18n.changeLanguage(value);
+              }}
+            >
               <SelectTrigger className={cn("min-w-[9.5rem]", chromeTriggerClass)}>
                 <CurrentFlag className="h-3.5 w-5 rounded-[2px] shadow-sm" />
                 <span className="truncate text-sm">{currentLocaleLabel}</span>

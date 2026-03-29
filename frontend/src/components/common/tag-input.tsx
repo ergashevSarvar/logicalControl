@@ -9,9 +9,10 @@ type TagInputProps = {
   value: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
+  addLabel?: string;
 };
 
-export function TagInput({ value, onChange, placeholder }: TagInputProps) {
+export function TagInput({ value, onChange, placeholder, addLabel = "Add" }: TagInputProps) {
   const [draft, setDraft] = useState("");
 
   function addTag(rawValue: string) {
@@ -24,11 +25,11 @@ export function TagInput({ value, onChange, placeholder }: TagInputProps) {
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-3">
+    <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
       <div className="flex flex-wrap gap-2">
         {value.length === 0 ? <p className="text-sm text-muted-foreground">{placeholder}</p> : null}
         {value.map((item) => (
-          <Badge key={item} variant="secondary" className="h-8 gap-2 rounded-full px-3">
+          <Badge key={item} variant="secondary" className="h-9 gap-2 rounded-full px-3.5 text-sm">
             {item}
             <button
               type="button"
@@ -42,6 +43,7 @@ export function TagInput({ value, onChange, placeholder }: TagInputProps) {
       </div>
       <div className="flex gap-2">
         <Input
+          className="h-11 rounded-[14px] px-4 text-[15px]"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -52,8 +54,8 @@ export function TagInput({ value, onChange, placeholder }: TagInputProps) {
           }}
           placeholder={placeholder}
         />
-        <Button type="button" variant="outline" onClick={() => addTag(draft)}>
-          Add
+        <Button type="button" variant="outline" className="h-11 rounded-[14px] px-4" onClick={() => addTag(draft)}>
+          {addLabel}
         </Button>
       </div>
     </div>

@@ -99,6 +99,13 @@ function serializeCanvas(nodes: Node[], edges: Edge[]) {
   };
 }
 
+function areCanvasesEqual(
+  left: ReturnType<typeof serializeCanvas>,
+  right: ReturnType<typeof serializeCanvas>,
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function extractNodeLabel(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : "Rule node";
 }
@@ -109,22 +116,33 @@ function inferRuleTypeFromNode(node: Node): RuleType {
 }
 
 export function RuleCanvasEditor({ canvas, onCanvasChange, onRuleAdd }: RuleCanvasEditorProps) {
-  const initialNodes = useMemo(() => normalizeNodes(canvas.nodes), [canvas]);
-  const initialEdges = useMemo(() => normalizeEdges(canvas.edges), [canvas]);
+  const initialNodes = useMemo(() => normalizeNodes(canvas.nodes), [canvas.nodes]);
+  const initialEdges = useMemo(() => normalizeEdges(canvas.edges), [canvas.edges]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const incomingCanvas = useMemo(() => serializeCanvas(initialNodes, initialEdges), [initialEdges, initialNodes]);
 
   useEffect(() => {
+    const currentCanvas = serializeCanvas(nodes, edges);
+    if (areCanvasesEqual(currentCanvas, incomingCanvas)) {
+      return;
+    }
+
     setNodes(initialNodes);
     setEdges(initialEdges);
-  }, [initialEdges, initialNodes, setEdges, setNodes]);
+  }, [edges, incomingCanvas, initialEdges, initialNodes, nodes, setEdges, setNodes]);
 
   useEffect(() => {
+    const nextCanvas = serializeCanvas(nodes, edges);
+    if (areCanvasesEqual(nextCanvas, incomingCanvas)) {
+      return;
+    }
+
     onCanvasChange({
       ...(canvas ?? {}),
-      ...serializeCanvas(nodes, edges),
+      ...nextCanvas,
     });
-  }, [canvas, edges, nodes, onCanvasChange]);
+  }, [canvas, edges, incomingCanvas, nodes, onCanvasChange]);
 
   function handleConnect(connection: Connection) {
     setEdges((current) => addEdge({ ...connection, animated: true, style: { strokeWidth: 2 } }, current));
