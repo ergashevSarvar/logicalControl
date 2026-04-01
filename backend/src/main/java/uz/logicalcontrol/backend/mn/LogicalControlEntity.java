@@ -34,13 +34,6 @@ import uz.logicalcontrol.backend.common.BaseEntity;
 @Table(name = "logical_controls")
 public class LogicalControlEntity extends BaseEntity {
 
-    public enum SystemName {
-        AT,
-        EK,
-        RW,
-        EC
-    }
-
     public enum ControlType {
         WARNING,
         ALLOW,
@@ -59,6 +52,11 @@ public class LogicalControlEntity extends BaseEntity {
         HYBRID
     }
 
+    public enum DirectionType {
+        ENTRY,
+        EXIT
+    }
+
     @Column(nullable = false, unique = true, length = 40)
     private String code;
 
@@ -68,9 +66,20 @@ public class LogicalControlEntity extends BaseEntity {
     @Column(length = 2000)
     private String objective;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private SystemName systemName;
+    @Column(length = 255)
+    private String basisFileName;
+
+    @Column(length = 120)
+    private String basisFileContentType;
+
+    private Long basisFileSize;
+
+    @JdbcTypeCode(SqlTypes.VARBINARY)
+    @Column(name = "basis_file_data", columnDefinition = "bytea")
+    private byte[] basisFileData;
+
+    @Column(nullable = false, length = 160)
+    private String systemName;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "jsonb")
@@ -128,6 +137,10 @@ public class LogicalControlEntity extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private DeploymentScope deploymentScope;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private DirectionType directionType;
 
     @Column(nullable = false)
     @lombok.Builder.Default

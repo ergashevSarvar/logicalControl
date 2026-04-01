@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { LoadingScreen } from "@/components/common/loading-screen";
 
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const ClassifiersPage = lazy(() => import("@/pages/ClassifiersPage").then((module) => ({ default: module.ClassifiersPage })));
 const ControlEditorPage = lazy(() => import("@/pages/ControlEditorPage").then((module) => ({ default: module.ControlEditorPage })));
 const ControlsListPage = lazy(() => import("@/pages/ControlsListPage").then((module) => ({ default: module.ControlsListPage })));
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
@@ -18,6 +19,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<AppShell />}>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/classifiers" element={<ClassifiersPage />} />
           <Route path="/controls" element={<ControlsListPage />} />
           <Route path="/controls/new" element={<ControlEditorPage />} />
           <Route path="/controls/:id/edit" element={<ControlEditorPage />} />

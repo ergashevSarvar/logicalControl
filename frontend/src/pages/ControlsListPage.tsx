@@ -26,6 +26,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { duplicateControl, fetchControls } from "@/lib/api";
+import {
+  classifierQueryKeys,
+  getClassifierSystemTypes,
+} from "@/lib/classifiers";
 import type { ControlStatus, ControlSystem } from "@/lib/types";
 
 export function ControlsListPage() {
@@ -36,6 +40,13 @@ export function ControlsListPage() {
   const [status, setStatus] = useState<ControlStatus | "ALL">("ALL");
   const [system, setSystem] = useState<ControlSystem | "ALL">("ALL");
   const deferredSearch = useDeferredValue(search);
+  const systemTypesQuery = useQuery({
+    queryKey: classifierQueryKeys.systemTypes,
+    queryFn: getClassifierSystemTypes,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
+  const availableSystems = [...new Set((systemTypesQuery.data ?? []).filter((item) => item.active).map((item) => item.systemName))];
 
   const controlsQuery = useQuery({
     queryKey: ["controls", deferredSearch, status, system],
@@ -86,10 +97,11 @@ export function ControlsListPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All systems</SelectItem>
-              <SelectItem value="AT">AT</SelectItem>
-              <SelectItem value="EK">EK</SelectItem>
-              <SelectItem value="RW">RW</SelectItem>
-              <SelectItem value="EC">EC</SelectItem>
+              {availableSystems.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

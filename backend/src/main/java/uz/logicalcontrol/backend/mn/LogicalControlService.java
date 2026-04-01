@@ -2,6 +2,7 @@ package uz.logicalcontrol.backend.mn;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,7 +36,7 @@ public class LogicalControlService {
         return logicalControlRepository.findAllByOrderByUpdatedAtDesc().stream()
             .filter(control -> matchesQuery(control, query))
             .filter(control -> matchesEnum(control.getStatus().name(), status))
-            .filter(control -> matchesEnum(control.getSystemName().name(), systemName))
+            .filter(control -> matchesText(control.getSystemName(), systemName))
             .map(control -> new ControlDtos.ControlListItem(
                 control.getId(),
                 control.getCode(),
@@ -68,10 +69,25 @@ public class LogicalControlService {
         return toDetail(control, recentLogs, changeLogs);
     }
 
+    @Transactional(readOnly = true)
+    public ControlDtos.BasisFileContent getBasisFile(UUID id) {
+        var control = findControl(id);
+        if (control.getBasisFileData() == null || control.getBasisFileData().length == 0) {
+            throw new EntityNotFoundException("MN asosi fayli topilmadi: " + id);
+        }
+
+        return new ControlDtos.BasisFileContent(
+            control.getBasisFileName(),
+            control.getBasisFileContentType(),
+            control.getBasisFileData()
+        );
+    }
+
     @Transactional
     public ControlDtos.ControlDetail create(ControlDtos.ControlRequest request, Authentication authentication) {
         validateUniqueFields(request.code(), request.uniqueNumber(), null);
         validateMessages(request.messages());
+        validateDirection(request.deploymentScope(), request.directionType());
 
         var control = new LogicalControlEntity();
         applyRequest(control, request);
@@ -89,6 +105,7 @@ public class LogicalControlService {
         var control = findControl(id);
         validateUniqueFields(request.code(), request.uniqueNumber(), id);
         validateMessages(request.messages());
+        validateDirection(request.deploymentScope(), request.directionType());
 
         applyRequest(control, request);
         logicalControlRepository.save(control);
@@ -107,6 +124,10 @@ public class LogicalControlService {
             .code(source.getCode() + "-COPY")
             .name(source.getName() + " copy")
             .objective(source.getObjective())
+            .basisFileName(source.getBasisFileName())
+            .basisFileContentType(source.getBasisFileContentType())
+            .basisFileSize(source.getBasisFileSize())
+            .basisFileData(source.getBasisFileData() == null ? null : source.getBasisFileData().clone())
             .systemName(source.getSystemName())
             .approvers(new ArrayList<>(source.getApprovers()))
             .startDate(source.getStartDate())
@@ -125,6 +146,7 @@ public class LogicalControlService {
             .smsNotificationEnabled(source.isSmsNotificationEnabled())
             .smsPhones(new ArrayList<>(source.getSmsPhones()))
             .deploymentScope(source.getDeploymentScope())
+            .directionType(source.getDirectionType())
             .versionNumber(Optional.ofNullable(source.getVersionNumber()).orElse(1) + 1)
             .timeoutMs(source.getTimeoutMs())
             .lastExecutionDurationMs(source.getLastExecutionDurationMs())
@@ -172,6 +194,10 @@ public class LogicalControlService {
         return value == null || value.isBlank() || source.equalsIgnoreCase(value.trim());
     }
 
+    private boolean matchesText(String source, String value) {
+        return value == null || value.isBlank() || source.equalsIgnoreCase(value.trim());
+    }
+
     private void validateUniqueFields(String code, String uniqueNumber, UUID id) {
         var codeExists = id == null
             ? logicalControlRepository.existsByCodeIgnoreCase(code)
@@ -201,6 +227,15 @@ public class LogicalControlService {
         }
     }
 
+    private void validateDirection(
+        LogicalControlEntity.DeploymentScope deploymentScope,
+        LogicalControlEntity.DirectionType directionType
+    ) {
+        if (deploymentScope == LogicalControlEntity.DeploymentScope.INTERNAL && directionType == null) {
+            throw new IllegalArgumentException("Ichki tizim uchun yo'nalish majburiy");
+        }
+    }
+
     private LogicalControlEntity findControl(UUID id) {
         return logicalControlRepository.findById(id)
             .orElseThrow(() -> new EntityNotFoundException("MN topilmadi: " + id));
@@ -210,7 +245,8 @@ public class LogicalControlService {
         control.setCode(request.code().trim());
         control.setName(request.name().trim());
         control.setObjective(request.objective());
-        control.setSystemName(request.systemName());
+        applyBasisFile(control, request);
+        control.setSystemName(request.systemName().trim());
         control.setApprovers(listOrEmpty(request.approvers()));
         control.setStartDate(request.startDate());
         control.setFinishDate(request.finishDate());
@@ -222,12 +258,15 @@ public class LogicalControlService {
         control.setStatus(request.status());
         control.setSuspendedUntil(request.suspendedUntil());
         control.setMessages(new LinkedHashMap<>(request.messages()));
-        control.setPhoneExtension(request.phoneExtension());
+        control.setPhoneExtension(trimToNull(request.phoneExtension()));
         control.setPriorityOrder(request.priorityOrder());
         control.setConfidentialityLevel(request.confidentialityLevel());
         control.setSmsNotificationEnabled(Boolean.TRUE.equals(request.smsNotificationEnabled()));
         control.setSmsPhones(listOrEmpty(request.smsPhones()));
         control.setDeploymentScope(request.deploymentScope());
+        control.setDirectionType(
+            request.deploymentScope() == LogicalControlEntity.DeploymentScope.INTERNAL ? request.directionType() : null
+        );
         control.setVersionNumber(Optional.ofNullable(request.versionNumber()).orElse(1));
         control.setTimeoutMs(request.timeoutMs());
         control.setLastExecutionDurationMs(request.lastExecutionDurationMs());
@@ -253,6 +292,26 @@ public class LogicalControlService {
         }
     }
 
+    private void applyBasisFile(LogicalControlEntity control, ControlDtos.ControlRequest request) {
+        if (Boolean.TRUE.equals(request.basisFileRemoved())) {
+            control.setBasisFileName(null);
+            control.setBasisFileContentType(null);
+            control.setBasisFileSize(null);
+            control.setBasisFileData(null);
+            return;
+        }
+
+        if (request.basisFileBase64() == null || request.basisFileBase64().isBlank()) {
+            return;
+        }
+
+        var decoded = Base64.getDecoder().decode(request.basisFileBase64());
+        control.setBasisFileName(trimToNull(request.basisFileName()));
+        control.setBasisFileContentType(trimToNull(request.basisFileContentType()));
+        control.setBasisFileSize((long) decoded.length);
+        control.setBasisFileData(decoded);
+    }
+
     private void appendChangeLog(LogicalControlEntity control, String actor, String action, Map<String, Object> details) {
         changeLogRepository.save(ChangeLogEntity.builder()
             .control(control)
@@ -273,6 +332,12 @@ public class LogicalControlService {
             control.getCode(),
             control.getName(),
             control.getObjective(),
+            control.getBasisFileName(),
+            control.getBasisFileContentType(),
+            control.getBasisFileSize(),
+            null,
+            false,
+            control.getBasisFileData() != null && control.getBasisFileData().length > 0,
             control.getSystemName(),
             listOrEmpty(control.getApprovers()),
             control.getStartDate(),
@@ -291,6 +356,7 @@ public class LogicalControlService {
             control.isSmsNotificationEnabled(),
             listOrEmpty(control.getSmsPhones()),
             control.getDeploymentScope(),
+            control.getDirectionType(),
             control.getVersionNumber(),
             control.getTimeoutMs(),
             control.getLastExecutionDurationMs(),
@@ -350,5 +416,14 @@ public class LogicalControlService {
 
     private <T> Map<String, T> mapOrEmpty(Map<String, T> value) {
         return value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        var normalized = value.trim();
+        return normalized.isBlank() ? null : normalized;
     }
 }

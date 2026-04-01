@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
+import uz.logicalcontrol.backend.classifier.ClassifierDepartmentEntity;
+import uz.logicalcontrol.backend.classifier.ClassifierDepartmentRepository;
+import uz.logicalcontrol.backend.classifier.ClassifierProcessStageEntity;
+import uz.logicalcontrol.backend.classifier.ClassifierProcessStageRepository;
+import uz.logicalcontrol.backend.classifier.ClassifierSystemTypeEntity;
+import uz.logicalcontrol.backend.classifier.ClassifierSystemTypeRepository;
 import uz.logicalcontrol.backend.dictionary.DictionaryEntryEntity;
 import uz.logicalcontrol.backend.dictionary.DictionaryEntryRepository;
 import uz.logicalcontrol.backend.exception.ExceptionEntryEntity;
@@ -34,6 +41,29 @@ import uz.logicalcontrol.backend.user.UserRepository;
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
 
+    private record ProcessStageSeed(String name, String description, int sortOrder) {
+    }
+
+    private static final List<ProcessStageSeed> REQUIRED_PROCESS_STAGES = List.of(
+        new ProcessStageSeed("Ma'lumot kiritish", "Ma'lumotlarni dastlabki kiritish bosqichi.", 1),
+        new ProcessStageSeed("Jo'natish", "Jo'natish jarayonidagi nazorat bosqichi.", 2),
+        new ProcessStageSeed("Qabul qilish", "Qabul qilish jarayonidagi nazorat bosqichi.", 3),
+        new ProcessStageSeed("Biriktirish", "Hujjat yoki obyektlarni biriktirish bosqichi.", 4),
+        new ProcessStageSeed("Verifikatsiyadan o'tkazish", "Verifikatsiya va solishtirish bosqichi.", 5),
+        new ProcessStageSeed("Transport nazorati", "Transport vositasi bo'yicha nazorat bosqichi.", 6),
+        new ProcessStageSeed("IKM nazorati", "IKM nazorati bosqichi.", 7),
+        new ProcessStageSeed("Bojxona ko'zdan kechiruvi", "Bojxona ko'zdan kechiruvi bosqichi.", 8),
+        new ProcessStageSeed("Kinolog tekshiruvi", "Kinolog tekshiruvi bosqichi.", 9),
+        new ProcessStageSeed("Veterinariya nazorati", "Veterinariya nazorati bosqichi.", 10),
+        new ProcessStageSeed("Fitosanitariya nazorati", "Fitosanitariya nazorati bosqichi.", 11),
+        new ProcessStageSeed("Nazoratga qo'yish", "Nazoratga qo'yish bosqichi.", 12),
+        new ProcessStageSeed("Postga yetib keldi", "Postga yetib kelganini qayd etish bosqichi.", 13),
+        new ProcessStageSeed("Nazoratdan yechish", "Nazoratdan yechish bosqichi.", 14),
+        new ProcessStageSeed("Omborga yetib keldi", "Omborga yetib kelganini qayd etish bosqichi.", 15),
+        new ProcessStageSeed("Omborda nazoratdan yechilgan", "Omborda nazoratdan yechilgan bosqichi.", 16),
+        new ProcessStageSeed("Keyingi manzilga yuborilgan", "Keyingi manzilga yuborish bosqichi.", 17)
+    );
+
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final LogicalControlRepository logicalControlRepository;
@@ -41,6 +71,9 @@ public class DataSeeder implements CommandLineRunner {
     private final ChangeLogRepository changeLogRepository;
     private final DictionaryEntryRepository dictionaryEntryRepository;
     private final ExceptionEntryRepository exceptionEntryRepository;
+    private final ClassifierDepartmentRepository classifierDepartmentRepository;
+    private final ClassifierProcessStageRepository classifierProcessStageRepository;
+    private final ClassifierSystemTypeRepository classifierSystemTypeRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -49,6 +82,7 @@ public class DataSeeder implements CommandLineRunner {
         seedRolesAndAdmin();
         seedDictionaries();
         seedExceptions();
+        seedClassifiers();
         seedControls();
     }
 
@@ -120,16 +154,87 @@ public class DataSeeder implements CommandLineRunner {
         ));
     }
 
+    private void seedClassifiers() {
+        if (classifierDepartmentRepository.count() == 0) {
+            classifierDepartmentRepository.saveAll(List.of(
+                department("Bojxona nazorati va rasmiylashtiruvini tashkil etish boshqarmasi", "Boshqarma"),
+                department("Notarif tartibga solish boshqarmasi", "Boshqarma"),
+                department("Targetlash va xavflarni monitoring qilish boshqarmasi", "Boshqarma"),
+                department("Axborot-kommunikatsiya texnologiyalari va kiberxavfsizligini ta'minlash boshqarmasi", "Boshqarma"),
+                department("Strategik rejalashtirish va bojxona tartib-taomillarini soddalashtirish boshqarmasi", "Boshqarma"),
+                department("Bojxona to'lovlari boshqarmasi", "Boshqarma"),
+                department("Tashqi savdo bojxona statistikasi boshqarmasi", "Boshqarma"),
+                department("Valyuta nazorati boshqarmasi", "Boshqarma"),
+                department("Moliya-iqtisodiyot boshqarmasi", "Boshqarma"),
+                department("Moddiy-texnika ta'minoti boshqarmasi", "Boshqarma"),
+                department("Kapital qurilish laboratoriyasi", "Laboratoriya"),
+                department("Kontrabandaga qarshi kurashish boshqarmasi", "Boshqarma"),
+                department("Bojxona audit boshqarmasi", "Boshqarma"),
+                department("Harbiy safarbarlik, jangovar tayyorgarlik va qo'riqlash boshqarmasi", "Boshqarma"),
+                department("Xalqaro hamkorlik boshqarmasi", "Boshqarma"),
+                department("Surishtiruv va ma'muriy amaliyot boshqarmasi", "Boshqarma"),
+                department("Rais maslahatchisi", "Lavozim"),
+                department("Inson resurslarini rivojlantirish va boshqarish boshqarmasi", "Boshqarma"),
+                department("Shaxsiy xavfsizlik boshqarmasi", "Boshqarma"),
+                department("Tashkiliy-nazorat, xizmat faoliyatini tahlil qilish va baholash boshqarmasi", "Boshqarma"),
+                department("Yuridik boshqarma", "Boshqarma"),
+                department("Jamoatchilik va ommaviy axborot vositalari bilan aloqalar bo'limi", "Bo'lim"),
+                department("Murojaatlar bilan ishlash bo'limi", "Bo'lim"),
+                department("Tibbiy ijtimoiy muassasalar bilan ishlash bo'limi", "Bo'lim"),
+                department("Ichki audit va moliyaviy nazorat bo'limi", "Bo'lim"),
+                department("Birinchi bo'lim", "Bo'lim"),
+                department("A sektori", "Sektor")
+            ));
+        }
+
+        seedRequiredProcessStages();
+
+        if (classifierSystemTypeRepository.count() == 0) {
+            seedRequiredSystemTypes();
+            return;
+        }
+
+        seedRequiredSystemTypes();
+    }
+
     private void seedControls() {
         if (logicalControlRepository.count() > 0) {
             return;
         }
 
         var controls = List.of(
-            control("MN-AT-001", "Ruxsatnoma va mashina raqami mosligi", LogicalControlEntity.SystemName.AT, LogicalControlEntity.ControlType.BLOCK),
-            control("MN-EK-002", "Risk toifasi bo'yicha ogohlantirish", LogicalControlEntity.SystemName.EK, LogicalControlEntity.ControlType.WARNING),
-            control("MN-RW-003", "Muddatdan o'tgan ruxsatnoma", LogicalControlEntity.SystemName.RW, LogicalControlEntity.ControlType.BLOCK),
-            control("MN-EC-004", "Maxfiy yuk bo'yicha qo'shimcha nazorat", LogicalControlEntity.SystemName.EC, LogicalControlEntity.ControlType.ALLOW)
+            control(
+                "MN-AT-001",
+                "Ruxsatnoma va mashina raqami mosligi",
+                "Yukli avtotransport (AT)",
+                LogicalControlEntity.DeploymentScope.INTERNAL,
+                LogicalControlEntity.DirectionType.ENTRY,
+                LogicalControlEntity.ControlType.BLOCK
+            ),
+            control(
+                "MN-EK-002",
+                "Risk toifasi bo'yicha ogohlantirish",
+                "Eksport uch qadam (EK)",
+                LogicalControlEntity.DeploymentScope.EXTERNAL,
+                null,
+                LogicalControlEntity.ControlType.WARNING
+            ),
+            control(
+                "MN-RW-003",
+                "Muddatdan o'tgan ruxsatnoma",
+                "Temir yo'l (RW)",
+                LogicalControlEntity.DeploymentScope.INTERNAL,
+                LogicalControlEntity.DirectionType.EXIT,
+                LogicalControlEntity.ControlType.BLOCK
+            ),
+            control(
+                "MN-EC-004",
+                "Maxfiy yuk bo'yicha qo'shimcha nazorat",
+                "Elektron tijorat (EC)",
+                LogicalControlEntity.DeploymentScope.EXTERNAL,
+                null,
+                LogicalControlEntity.ControlType.ALLOW
+            )
         );
 
         logicalControlRepository.saveAll(controls);
@@ -153,10 +258,78 @@ public class DataSeeder implements CommandLineRunner {
             .build();
     }
 
+    private ClassifierDepartmentEntity department(String name, String type) {
+        return ClassifierDepartmentEntity.builder()
+            .name(name)
+            .departmentType(type)
+            .active(true)
+            .build();
+    }
+
+    private void seedRequiredProcessStages() {
+        var desiredNames = REQUIRED_PROCESS_STAGES.stream()
+            .map(ProcessStageSeed::name)
+            .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+
+        classifierProcessStageRepository.findAll().stream()
+            .filter(entity -> !desiredNames.contains(entity.getName()))
+            .forEach(classifierProcessStageRepository::delete);
+
+        REQUIRED_PROCESS_STAGES.forEach(stage -> {
+            var entity = classifierProcessStageRepository.findByNameIgnoreCase(stage.name())
+                .orElseGet(() -> ClassifierProcessStageEntity.builder().name(stage.name()).build());
+
+            entity.setName(stage.name());
+            entity.setDescription(stage.description());
+            entity.setSortOrder(stage.sortOrder());
+            entity.setActive(true);
+
+            classifierProcessStageRepository.save(entity);
+        });
+    }
+
+    private ClassifierProcessStageEntity processStage(String name, String description) {
+        return ClassifierProcessStageEntity.builder()
+            .name(name)
+            .description(description)
+            .sortOrder(0)
+            .active(true)
+            .build();
+    }
+
+    private void seedRequiredSystemTypes() {
+        var systemNames = List.of(
+            "Yukli avtotransport (AT)",
+            "Yuksuz avtotransport (MB)",
+            "Temir yo'l (RW)",
+            "Eksport uch qadam (EK)",
+            "Tolling (TL)",
+            "Elektron tijorat (EC)"
+        );
+
+        Arrays.asList("Ichki", "Tashqi").forEach(scopeType ->
+            systemNames.forEach(systemName -> {
+                if (!classifierSystemTypeRepository.existsBySystemNameIgnoreCaseAndScopeTypeIgnoreCase(systemName, scopeType)) {
+                    classifierSystemTypeRepository.save(systemType(systemName, scopeType));
+                }
+            })
+        );
+    }
+
+    private ClassifierSystemTypeEntity systemType(String systemName, String scopeType) {
+        return ClassifierSystemTypeEntity.builder()
+            .systemName(systemName)
+            .scopeType(scopeType)
+            .active(true)
+            .build();
+    }
+
     private LogicalControlEntity control(
         String code,
         String name,
-        LogicalControlEntity.SystemName systemName,
+        String systemName,
+        LogicalControlEntity.DeploymentScope deploymentScope,
+        LogicalControlEntity.DirectionType directionType,
         LogicalControlEntity.ControlType controlType
     ) {
         var control = LogicalControlEntity.builder()
@@ -169,7 +342,7 @@ public class DataSeeder implements CommandLineRunner {
             .finishDate(LocalDate.now().plusMonths(6))
             .uniqueNumber(code.replace("MN", "UNQ"))
             .controlType(controlType)
-            .processStage("VERIFICATION")
+            .processStage("Verifikatsiyadan o'tkazish")
             .authorName("Admin User")
             .responsibleDepartment("Risk boshqarmasi")
             .status(LogicalControlEntity.ControlStatus.ACTIVE)
@@ -180,12 +353,13 @@ public class DataSeeder implements CommandLineRunner {
                 "ru", "Условие не выполнено, проверьте декларацию повторно",
                 "en", "Condition failed, review declaration again"
             ))
-            .phoneExtension("1155")
+            .phoneExtension(null)
             .priorityOrder(1)
             .confidentialityLevel("INTERNAL")
             .smsNotificationEnabled(true)
             .smsPhones(new ArrayList<>(List.of("+998901112233", "+998977778899")))
-            .deploymentScope(LogicalControlEntity.DeploymentScope.HYBRID)
+            .deploymentScope(deploymentScope)
+            .directionType(directionType)
             .versionNumber(3)
             .timeoutMs(3500)
             .lastExecutionDurationMs(742L)

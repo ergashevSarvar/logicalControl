@@ -2,10 +2,11 @@ export type LocaleCode = "uzCyrl" | "uzLatn" | "ru" | "en";
 export type ThemeMode = "light" | "dark" | "system";
 export type PaletteName = "ocean" | "copper" | "emerald" | "graphite";
 
-export type ControlSystem = "AT" | "EK" | "RW" | "EC";
+export type ControlSystem = string;
 export type ControlType = "WARNING" | "ALLOW" | "BLOCK";
 export type ControlStatus = "ACTIVE" | "CANCELLED" | "SUSPENDED";
 export type DeploymentScope = "INTERNAL" | "EXTERNAL" | "HYBRID";
+export type ControlDirection = "ENTRY" | "EXIT";
 export type RuleType = "CONDITION" | "GROUP" | "ACTION" | "RESULT";
 export type LogResult = "POSITIVE" | "NEGATIVE";
 
@@ -62,6 +63,53 @@ export interface LookupResponse {
   roles: Array<{ code: string; name: string }>;
 }
 
+export interface ClassifierDepartment {
+  id: string;
+  name: string;
+  departmentType: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassifierDepartmentRequest {
+  name: string;
+  departmentType: string;
+  active: boolean;
+}
+
+export interface ClassifierProcessStage {
+  id: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassifierProcessStageRequest {
+  name: string;
+  description: string;
+  active: boolean;
+  sortOrder?: number;
+}
+
+export interface ClassifierSystemType {
+  id: string;
+  systemName: string;
+  scopeType: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassifierSystemTypeRequest {
+  systemName: string;
+  scopeType: string;
+  active: boolean;
+}
+
 export interface ControlRule {
   id?: string;
   name: string;
@@ -113,7 +161,12 @@ export interface ControlRequest {
   code: string;
   name: string;
   objective: string;
-  systemName: ControlSystem;
+  basisFileName: string;
+  basisFileContentType: string;
+  basisFileSize: number | null;
+  basisFileBase64: string | null;
+  basisFileRemoved: boolean;
+  systemName: string;
   approvers: string[];
   startDate: string | null;
   finishDate: string | null;
@@ -131,6 +184,7 @@ export interface ControlRequest {
   smsNotificationEnabled: boolean;
   smsPhones: string[];
   deploymentScope: DeploymentScope;
+  directionType: ControlDirection | null;
   versionNumber: number;
   timeoutMs: number;
   lastExecutionDurationMs: number;
@@ -145,6 +199,7 @@ export interface ControlRequest {
 
 export interface ControlDetail extends ControlRequest {
   id: string;
+  hasBasisFile: boolean;
   recentLogs: ControlLogItem[];
   changeLogs: ChangeLogItem[];
   createdAt: string;
@@ -201,15 +256,20 @@ export function createDefaultControlRequest(): ControlRequest {
     code: "",
     name: "",
     objective: "",
-    systemName: "AT",
+    basisFileName: "",
+    basisFileContentType: "",
+    basisFileSize: null,
+    basisFileBase64: null,
+    basisFileRemoved: false,
+    systemName: "Yukli avtotransport (AT)",
     approvers: [],
     startDate: null,
     finishDate: null,
     uniqueNumber: "",
-    controlType: "WARNING",
-    processStage: "VERIFICATION",
+    controlType: "BLOCK",
+    processStage: "Verifikatsiyadan o'tkazish",
     authorName: "Admin User",
-    responsibleDepartment: "Risk boshqarmasi",
+    responsibleDepartment: "Bojxona nazorati va rasmiylashtiruvini tashkil etish boshqarmasi",
     status: "ACTIVE",
     suspendedUntil: null,
     messages: {
@@ -218,12 +278,13 @@ export function createDefaultControlRequest(): ControlRequest {
       ru: "",
       en: "",
     },
-    phoneExtension: "1155",
+    phoneExtension: "",
     priorityOrder: 1,
-    confidentialityLevel: "INTERNAL",
+    confidentialityLevel: "Maxfiy emas",
     smsNotificationEnabled: false,
     smsPhones: [],
-    deploymentScope: "HYBRID",
+    deploymentScope: "INTERNAL",
+    directionType: "ENTRY",
     versionNumber: 1,
     timeoutMs: 3000,
     lastExecutionDurationMs: 0,
@@ -246,6 +307,11 @@ export function controlDetailToRequest(detail: ControlDetail): ControlRequest {
     code: detail.code,
     name: detail.name,
     objective: detail.objective,
+    basisFileName: detail.basisFileName,
+    basisFileContentType: detail.basisFileContentType,
+    basisFileSize: detail.basisFileSize,
+    basisFileBase64: null,
+    basisFileRemoved: false,
     systemName: detail.systemName,
     approvers: detail.approvers,
     startDate: detail.startDate,
@@ -264,6 +330,7 @@ export function controlDetailToRequest(detail: ControlDetail): ControlRequest {
     smsNotificationEnabled: detail.smsNotificationEnabled,
     smsPhones: detail.smsPhones,
     deploymentScope: detail.deploymentScope,
+    directionType: detail.directionType,
     versionNumber: detail.versionNumber,
     timeoutMs: detail.timeoutMs ?? 3000,
     lastExecutionDurationMs: detail.lastExecutionDurationMs ?? 0,

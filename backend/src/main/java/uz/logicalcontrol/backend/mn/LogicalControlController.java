@@ -3,6 +3,9 @@ package uz.logicalcontrol.backend.mn;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,8 +37,26 @@ public class LogicalControlController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ControlDtos.ControlDetail> get(@PathVariable UUID id) {
+    public ResponseEntity<ControlDtos.ControlDetail> get(@PathVariable("id") UUID id) {
         return ResponseEntity.ok(logicalControlService.get(id));
+    }
+
+    @GetMapping("/{id}/basis-file")
+    public ResponseEntity<ByteArrayResource> downloadBasisFile(@PathVariable("id") UUID id) {
+        var file = logicalControlService.getBasisFile(id);
+        var mediaType = file.contentType() == null || file.contentType().isBlank()
+            ? MediaType.APPLICATION_OCTET_STREAM
+            : MediaType.parseMediaType(file.contentType());
+        var resource = new ByteArrayResource(file.data());
+
+        return ResponseEntity.ok()
+            .contentType(mediaType)
+            .contentLength(file.data().length)
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"" + (file.fileName() == null ? "mn-asos" : file.fileName()) + "\""
+            )
+            .body(resource);
     }
 
     @PostMapping
@@ -48,7 +69,7 @@ public class LogicalControlController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ControlDtos.ControlDetail> update(
-        @PathVariable UUID id,
+        @PathVariable("id") UUID id,
         @Valid @RequestBody ControlDtos.ControlRequest request,
         Authentication authentication
     ) {
@@ -56,7 +77,7 @@ public class LogicalControlController {
     }
 
     @PostMapping("/{id}/duplicate")
-    public ResponseEntity<ControlDtos.ControlDetail> duplicate(@PathVariable UUID id, Authentication authentication) {
+    public ResponseEntity<ControlDtos.ControlDetail> duplicate(@PathVariable("id") UUID id, Authentication authentication) {
         return ResponseEntity.ok(logicalControlService.duplicate(id, authentication));
     }
 }

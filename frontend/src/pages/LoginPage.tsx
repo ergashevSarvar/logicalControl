@@ -40,7 +40,6 @@ export function LoginPage() {
 
     try {
       await login(username, password);
-      toast.success("Sessiya ochildi");
       startTransition(() => {
         navigate(from, { replace: true });
       });

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createControl, fetchControl, updateControl } from "@/lib/api";
-import { controlDetailToRequest, createDefaultControlRequest, createDefaultRule, type ControlRequest, type ControlRule, type RuleType } from "@/lib/types";
+import { controlDetailToRequest, createDefaultControlRequest, type ControlRequest, type ControlRule, type RuleType } from "@/lib/types";
 
 function areCanvasStatesEqual(left: Record<string, unknown>, right: Record<string, unknown>) {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -62,13 +62,6 @@ export function RuleBuilderPage() {
     }));
   }
 
-  function addRule(type: RuleType) {
-    setDraft((current) => ({
-      ...current,
-      rules: [...current.rules, { ...createDefaultRule(current.rules.length), ruleType: type }],
-    }));
-  }
-
   function removeRule(index: number) {
     setDraft((current) => ({
       ...current,
@@ -95,6 +88,7 @@ export function RuleBuilderPage() {
 
       <RuleCanvasEditor
         canvas={draft.ruleBuilderCanvas}
+        rootLabel={draft.name || "Mantiqiy nazorat"}
         onCanvasChange={(ruleBuilderCanvas) =>
           setDraft((current) =>
             areCanvasStatesEqual(current.ruleBuilderCanvas, ruleBuilderCanvas)
@@ -102,7 +96,6 @@ export function RuleBuilderPage() {
               : { ...current, ruleBuilderCanvas }
           )
         }
-        onRuleAdd={addRule}
       />
 
       <div className="grid gap-6 xl:grid-cols-2">

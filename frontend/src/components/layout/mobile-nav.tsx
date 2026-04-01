@@ -1,10 +1,11 @@
-import { LayoutDashboard, ListChecks, PlusSquare, Route, ScrollText } from "lucide-react";
+import { Blocks, LayoutDashboard, ListChecks, PlusSquare, Route, ScrollText } from "lucide-react";
 import { matchPath, NavLink, useLocation } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/", label: "Home", icon: LayoutDashboard },
+  { to: "/classifiers", label: "Tasniflagichlar", icon: Blocks },
   { to: "/controls", label: "MN", icon: ListChecks },
   { to: "/controls/new", label: "New", icon: PlusSquare },
   { to: "/builder", label: "Builder", icon: Route },
@@ -20,6 +21,8 @@ export function MobileNav() {
         return pathname === "/";
       case "/controls":
         return pathname === "/controls";
+      case "/classifiers":
+        return pathname === "/classifiers";
       case "/controls/new":
         return pathname === "/controls/new" || Boolean(matchPath("/controls/:id/edit", pathname));
       case "/builder":

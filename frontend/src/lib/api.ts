@@ -1,6 +1,12 @@
 import axios from "axios";
 
 import type {
+  ClassifierDepartment,
+  ClassifierDepartmentRequest,
+  ClassifierProcessStage,
+  ClassifierProcessStageRequest,
+  ClassifierSystemType,
+  ClassifierSystemTypeRequest,
   ControlDetail,
   ControlListItem,
   ControlRequest,
@@ -77,6 +83,13 @@ export async function updateControl(id: string, payload: ControlRequest) {
   return data;
 }
 
+export async function downloadControlBasisFile(id: string) {
+  const response = await api.get<Blob>(`/controls/${id}/basis-file`, {
+    responseType: "blob",
+  });
+  return response.data;
+}
+
 export async function duplicateControl(id: string) {
   const { data } = await api.post<ControlDetail>(`/controls/${id}/duplicate`);
   return data;
@@ -92,4 +105,61 @@ export async function fetchLogs(result?: string) {
 export async function fetchLookups() {
   const { data } = await api.get<LookupResponse>("/lookups/bootstrap");
   return data;
+}
+
+export async function fetchClassifierDepartments() {
+  const { data } = await api.get<ClassifierDepartment[]>("/classifiers/departments");
+  return data;
+}
+
+export async function createClassifierDepartment(payload: ClassifierDepartmentRequest) {
+  const { data } = await api.post<ClassifierDepartment>("/classifiers/departments", payload);
+  return data;
+}
+
+export async function updateClassifierDepartment(id: string, payload: ClassifierDepartmentRequest) {
+  const { data } = await api.put<ClassifierDepartment>(`/classifiers/departments/${id}`, payload);
+  return data;
+}
+
+export async function deleteClassifierDepartment(id: string) {
+  await api.delete(`/classifiers/departments/${id}`);
+}
+
+export async function fetchClassifierProcessStages() {
+  const { data } = await api.get<ClassifierProcessStage[]>("/classifiers/process-stages");
+  return data;
+}
+
+export async function createClassifierProcessStage(payload: ClassifierProcessStageRequest) {
+  const { data } = await api.post<ClassifierProcessStage>("/classifiers/process-stages", payload);
+  return data;
+}
+
+export async function updateClassifierProcessStage(id: string, payload: ClassifierProcessStageRequest) {
+  const { data } = await api.put<ClassifierProcessStage>(`/classifiers/process-stages/${id}`, payload);
+  return data;
+}
+
+export async function deleteClassifierProcessStage(id: string) {
+  await api.delete(`/classifiers/process-stages/${id}`);
+}
+
+export async function fetchClassifierSystemTypes() {
+  const { data } = await api.get<ClassifierSystemType[]>("/classifiers/system-types");
+  return data;
+}
+
+export async function createClassifierSystemType(payload: ClassifierSystemTypeRequest) {
+  const { data } = await api.post<ClassifierSystemType>("/classifiers/system-types", payload);
+  return data;
+}
+
+export async function updateClassifierSystemType(id: string, payload: ClassifierSystemTypeRequest) {
+  const { data } = await api.put<ClassifierSystemType>(`/classifiers/system-types/${id}`, payload);
+  return data;
+}
+
+export async function deleteClassifierSystemType(id: string) {
+  await api.delete(`/classifiers/system-types/${id}`);
 }

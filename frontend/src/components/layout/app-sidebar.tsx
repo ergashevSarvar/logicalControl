@@ -1,4 +1,5 @@
 import {
+  Blocks,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -17,11 +18,21 @@ import { useAuth } from "@/providers/auth-provider";
 
 const items = [
   { to: "/", icon: LayoutDashboard, key: "dashboard" },
+  { to: "/classifiers", icon: Blocks, key: "classifiers" },
   { to: "/controls", icon: ListChecks, key: "controls" },
   { to: "/controls/new", icon: PlusSquare, key: "create" },
   { to: "/builder", icon: Route, key: "builder" },
   { to: "/logs", icon: ScrollText, key: "logs" },
 ] as const;
+
+const fallbackLabels: Record<(typeof items)[number]["key"], string> = {
+  dashboard: "Bosh sahifa",
+  classifiers: "Tasniflagichlar",
+  controls: "MN Ro'yxati",
+  create: "MN yaratish",
+  builder: "Visual Rule Builder",
+  logs: "Logs va statistika",
+};
 
 type AppSidebarProps = {
   expanded: boolean;
@@ -40,6 +51,8 @@ export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
         return pathname === "/";
       case "/controls":
         return pathname === "/controls";
+      case "/classifiers":
+        return pathname === "/classifiers";
       case "/controls/new":
         return pathname === "/controls/new" || Boolean(matchPath("/controls/:id/edit", pathname));
       case "/builder":
@@ -102,7 +115,8 @@ export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
           <div className={cn(expanded ? "space-y-2" : "space-y-3")}>
             {items.map((item) => {
               const Icon = item.icon;
-              const label = t(`nav.${item.key}`);
+              const translatedLabel = t(`nav.${item.key}`);
+              const label = translatedLabel === `nav.${item.key}` ? fallbackLabels[item.key] : translatedLabel;
               const isActive = isItemActive(item.to);
 
               return (

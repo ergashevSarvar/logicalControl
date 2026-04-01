@@ -200,7 +200,7 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
   return (
     <header className="sticky top-3 z-30 rounded-[28px] border border-white/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(245,249,255,0.62))] px-5 py-3 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.24)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(25,31,43,0.84),rgba(20,26,37,0.8))]">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-        <div className="flex min-w-0 items-center gap-4 xl:w-[26rem]">
+        <div className="flex min-w-0 items-center gap-4 xl:w-[19rem]">
           <Button
             type="button"
             variant="ghost"
@@ -218,7 +218,7 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
           </div>
         </div>
 
-        <div ref={searchRef} className="relative xl:max-w-[28rem] xl:flex-1">
+        <div ref={searchRef} className="relative xl:max-w-[44rem] xl:flex-[1.7]">
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -303,7 +303,7 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
         </div>
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <div className={cn("flex h-11 min-w-[12rem] flex-col items-center justify-center rounded-[16px] px-3 text-center", chromeBlockClass)}>
+          <div className={cn("flex h-11 min-w-[10.5rem] flex-col items-center justify-center rounded-[16px] px-2.5 text-center", chromeBlockClass)}>
             <p className="text-xs font-medium text-primary">{dateLabel}</p>
             <p className="text-[1.1rem] font-semibold tracking-[0.18em] text-primary">{timeLabel}</p>
           </div>

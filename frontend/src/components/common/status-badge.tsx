@@ -8,8 +8,8 @@ const statusMap: Record<ControlStatus, { label: string; variant: "default" | "se
 };
 
 const typeMap: Record<ControlType, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  WARNING: { label: "Ogohlantirish", variant: "secondary" },
-  ALLOW: { label: "Ruxsat", variant: "default" },
+  WARNING: { label: "Ogohlantrish", variant: "secondary" },
+  ALLOW: { label: "Istisno", variant: "default" },
   BLOCK: { label: "Taqiqlash", variant: "destructive" },
 };
 
@@ -35,7 +35,7 @@ export function ResultBadge({ result }: { result: LogResult }) {
 
 export function SystemBadge({ system }: { system: ControlSystem }) {
   return (
-    <Badge variant="outline" className="font-semibold tracking-[0.18em] uppercase">
+    <Badge variant="outline" className="max-w-[20rem] font-medium whitespace-normal">
       {system}
     </Badge>
   );

@@ -28,11 +28,23 @@ public final class ControlDtos {
     ) {
     }
 
+    public record BasisFileContent(
+        String fileName,
+        String contentType,
+        byte[] data
+    ) {
+    }
+
     public record ControlRequest(
         @NotBlank String code,
         @NotBlank String name,
         String objective,
-        @NotNull LogicalControlEntity.SystemName systemName,
+        String basisFileName,
+        String basisFileContentType,
+        Long basisFileSize,
+        String basisFileBase64,
+        Boolean basisFileRemoved,
+        @NotBlank String systemName,
         List<String> approvers,
         LocalDate startDate,
         LocalDate finishDate,
@@ -50,6 +62,7 @@ public final class ControlDtos {
         Boolean smsNotificationEnabled,
         List<String> smsPhones,
         @NotNull LogicalControlEntity.DeploymentScope deploymentScope,
+        LogicalControlEntity.DirectionType directionType,
         Integer versionNumber,
         Integer timeoutMs,
         Long lastExecutionDurationMs,
@@ -67,7 +80,7 @@ public final class ControlDtos {
         UUID id,
         String code,
         String name,
-        LogicalControlEntity.SystemName systemName,
+        String systemName,
         LogicalControlEntity.ControlType controlType,
         LogicalControlEntity.ControlStatus status,
         String processStage,
@@ -107,7 +120,13 @@ public final class ControlDtos {
         String code,
         String name,
         String objective,
-        LogicalControlEntity.SystemName systemName,
+        String basisFileName,
+        String basisFileContentType,
+        Long basisFileSize,
+        String basisFileBase64,
+        Boolean basisFileRemoved,
+        boolean hasBasisFile,
+        String systemName,
         List<String> approvers,
         LocalDate startDate,
         LocalDate finishDate,
@@ -125,6 +144,7 @@ public final class ControlDtos {
         boolean smsNotificationEnabled,
         List<String> smsPhones,
         LogicalControlEntity.DeploymentScope deploymentScope,
+        LogicalControlEntity.DirectionType directionType,
         Integer versionNumber,
         Integer timeoutMs,
         Long lastExecutionDurationMs,

@@ -4,6 +4,7 @@ export const resources = {
       appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Bosh sahifa",
+        classifiers: "Tasniflagichlar",
         controls: "MN Ro'yxati",
         create: "MN yaratish",
         builder: "Visual Rule Builder",
@@ -120,8 +121,8 @@ export const resources = {
           en: "Inglizcha",
         },
         options: {
-          warning: "Ogohlantirish",
-          allow: "Ruxsat berish",
+          warning: "Ogohlantrish",
+          allow: "Istisno",
           block: "Taqiqlash",
           active: "Faol",
           suspended: "Vaqtincha to'xtatilgan",
@@ -541,6 +542,7 @@ export const resources = {
       appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Dashboard",
+        classifiers: "Classifiers",
         controls: "MN List",
         create: "Create MN",
         builder: "Visual Rule Builder",

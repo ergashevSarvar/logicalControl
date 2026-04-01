@@ -1,12 +1,18 @@
-import { startTransition, useEffect, useState, type ReactNode } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, FileText, Maximize2, Minimize2, Upload, X } from "lucide-react";
 
 import { TagInput } from "@/components/common/tag-input";
+import { RuleCanvasEditor } from "@/components/rules/rule-canvas-editor";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/animate-ui/components/animate/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,19 +22,146 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createControl,
+  downloadControlBasisFile,
   fetchControl,
-  fetchLookups,
   updateControl,
 } from "@/lib/api";
-import { createDefaultControlRequest, type ControlRequest } from "@/lib/types";
+import {
+  buildSystemNameOptions,
+  buildProcessStageOptions,
+  classifierQueryKeys,
+  getClassifierProcessStages,
+  getClassifierSystemTypes,
+  getDefaultProcessStageName,
+  getDefaultSystemName,
+  resolveProcessStageValue,
+} from "@/lib/classifiers";
+import { createDefaultControlRequest, type ControlRequest, type DeploymentScope } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-const stepIds = ["overview", "validity", "messaging", "execution"] as const;
+const stepIds = ["overview", "execution"] as const;
+/*
+const deprecatedDepartmentNames = ["Risk boshqarmasi"] as const;
+const departmentOptions = [
+  "Bojxona nazorati va rasmiylashtiruvini tashkil etish boshqarmasi",
+  "Notarif tartibga solish boshqarmasi",
+  "Targetlash va xavflarni monitoring qilish boshqarmasi",
+  "Axborot-kommunikatsiya texnologiyalari va kiberxavfsizligini ta'minlash boshqarmasi",
+  "Strategik rejalashtirish va bojxona tartib-taomillarini soddalashtirish boshqarmasi",
+  "Bojxona to'lovlari boshqarmasi",
+  "Tashqi savdo bojxona statistikasi boshqarmasi",
+  "Valyuta nazorati boshqarmasi",
+  "Moliya-iqtisodiyot boshqarmasi",
+  "Moddiy-texnika ta'minoti boshqarmasi",
+  "Kapital qurilish laboratoriyasi",
+  "Kontrabandaga qarshi kurashish boshqarmasi",
+  "Bojxona audit boshqarmasi",
+  "Harbiy safarbarlik, jangovar tayyorgarlik va qo'riqlash boshqarmasi",
+  "Xalqaro hamkorlik boshqarmasi",
+  "Surishtiruv va ma'muriy amaliyot boshqarmasi",
+  "Rais maslahatchisi",
+  "Inson resurslarini rivojlantirish va boshqarish boshqarmasi",
+  "Shaxsiy xavfsizlik boshqarmasi",
+  "Tashkiliy-nazorat, xizmat faoliyatini tahlil qilish va baholash boshqarmasi",
+  "Yuridik boshqarma",
+  "Jamoatchilik va ommaviy axborot vositalari bilan aloqalar bo'limi",
+  "Murojaatlar bilan ishlash bo'limi",
+  "Tibbiy ijtimoiy muassasalar bilan ishlash bo'limi",
+  "Ichki audit va moliyaviy nazorat bo'limi",
+  "Birinchi bo'lim",
+  "«A» sektori",
+] as const;
+const processStageOptions = [
+  "Verifikatsiyadan o'tkazish",
+  "Dastlabki tekshiruvda qabul qilish",
+  "Rasmiylashtirish",
+  "Jo'natish",
+  "Bekor qilish",
+  "Ortga qaytarish",
+] as const;
+const legacyProcessStageMap: Record<string, string> = {
+  VERIFICATION: "Verifikatsiyadan o'tkazish",
+  ACCEPTANCE: "Dastlabki tekshiruvda qabul qilish",
+  CLEARANCE: "Rasmiylashtirish",
+  DISPATCH: "Jo'natish",
+  CANCELLED: "Bekor qilish",
+  RETURNED: "Ortga qaytarish",
+};
+*/
+/* const territoryOptions = [
+  "1700 - Toshkent-Aero IBK",
+  "1701 - UzR BQ Markaziy apparati",
+  "1703 - Andijon viloyati bojxona boshqarmasi",
+  "1706 - Buxoro viloyati bojxona boshqarmasi",
+  "1708 - Jizzax viloyati bojxona boshqarmasi",
+  "1710 - Qashqadaryo viloyati bojxona boshqarmasi",
+  "1712 - Navoiy viloyati bojxona boshqarmasi",
+  "1714 - Namangan viloyati bojxona boshqarmasi",
+  "1718 - Samarqand viloyati bojxona boshqarmasi",
+  "1722 - Surxondaryo viloyati bojxona boshqarmasi",
+  "1724 - Sirdaryo viloyati bojxona boshqarmasi",
+  "1726 - Toshkent shaxar bojxona boshqarmasi",
+  "1727 - Toshkent viloyati bojxona boshqarmasi",
+  "1730 - Farg‘ona viloyati bojxona boshqarmasi",
+  "1733 - Xorazm viloyati bojxona boshqarmasi",
+  "1735 - Qoraqalpog‘iston Respublikasi bojxona boshqarmasi",
+  "1790 - Iqtisodiyot va moliya vazirligi huzuridagi Bojxona Instituti",
+  "1791 - Milliy kinologiya markazi",
+  "1702 - Bojxona rasmiylashtiruvi markazi",
+] as const; */
+/* const postOptions = [
+  "26012 - Fayzobod TIF",
+  "33006 - Urganch temir yo‘l chegara posti",
+  "00101 - Islom Karimov nomidagi \"Toshkent\" xalqaro AEROi» chegara bojxona posti",
+  "00102 - Avia yuklar TIF",
+  "03002 - Do‘stlik chegara posti (Andijan)",
+  "03003 - Andijan AERO",
+  "03004 - Bobur TIF",
+  "03009 - Madaniyat chegara posti",
+  "03011 - Andijon TIF",
+  "03014 - Savay temir yo‘l chegara posti",
+  "03015 - Asaka TIF",
+  "06001 - Buxoro AERO",
+  "06002 - Kogon TIF",
+  "06006 - Buxoro TIF",
+  "06007 - Qorovulbozor TIF",
+  "06008 - G‘ijduvon TIF",
+  "06009 - Qorako‘l TIF",
+  "06010 - Olot chegara posti",
+  "06011 - Xo‘jadavlat temir yo‘l chegara posti",
+  "08003 - Uchto‘rg‘on chegara posti",
+  "08004 - Jizax TIF",
+  "08007 - Qo‘shkent chegara posti",
+  "10002 - Nasaf TIF",
+  "10003 - Qarshi temir yo‘l chegara posti",
+  "10005 - Muborak TIF",
+  "10006 - Kitob TIF",
+  "10007 - Qamashi-G‘uzor TIF",
+  "10008 - Qarshi-Kerki chegara posti",
+  "10010 - Qarshi-tola TIF",
+  "10011 - Talimarjon TIF",
+  "10012 - Qarshi AERO",
+  "12001 - Tinchlik TIF",
+  "12002 - Navoiy AERO",
+  "12003 - Navoiy TIF",
+  "12008 - Zarafshon TIF",
+  "12012 - Navoiy industrial TIF",
+  "14002 - Namangan AERO",
+  "14003 - Uchqo‘rg‘on chegara posti",
+  "14004 - Kosonsoy chegara posti",
+  "14005 - Pop chegara posti",
+  "14010 - Namangan TIF",
+] as const; */
+function generateUniqueControlNumber() {
+  const year = new Date().getFullYear();
+  const serial = String(Date.now()).slice(-7);
+  return `LC${year}${serial}`;
+}
 
 type EditorStep = (typeof stepIds)[number];
 
@@ -39,6 +172,7 @@ export function ControlEditorPage() {
   const controlId = params.id;
   const isEdit = Boolean(controlId);
   const [currentStep, setCurrentStep] = useState<EditorStep>("overview");
+  const [isBuilderExpanded, setIsBuilderExpanded] = useState(false);
 
   const form = useForm<ControlRequest>({
     defaultValues: createDefaultControlRequest(),
@@ -49,22 +183,89 @@ export function ControlEditorPage() {
     queryFn: () => fetchControl(controlId!),
     enabled: isEdit,
   });
-  const lookupsQuery = useQuery({
-    queryKey: ["lookups"],
-    queryFn: fetchLookups,
+  const processStagesQuery = useQuery({
+    queryKey: classifierQueryKeys.processStages,
+    queryFn: getClassifierProcessStages,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
+  const systemTypesQuery = useQuery({
+    queryKey: classifierQueryKeys.systemTypes,
+    queryFn: getClassifierSystemTypes,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
   });
 
   useEffect(() => {
     if (detailQuery.data) {
       form.reset({
         ...detailQuery.data,
+        basisFileBase64: null,
+        basisFileRemoved: false,
       });
     }
   }, [detailQuery.data, form]);
 
+  useEffect(() => {
+    if (isEdit || form.getValues("uniqueNumber")) {
+      return;
+    }
+
+    form.setValue("uniqueNumber", generateUniqueControlNumber(), {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }, [form, isEdit]);
+
+  useEffect(() => {
+    const currentStage = form.getValues("processStage");
+    const defaultProcessStageName = getDefaultProcessStageName(processStagesQuery.data ?? []);
+    const resolvedStage = resolveProcessStageValue(currentStage) || defaultProcessStageName;
+
+    if (resolvedStage && resolvedStage !== currentStage) {
+      form.setValue("processStage", resolvedStage, {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [form, processStagesQuery.data]);
+
+  const watchDeploymentScope = form.watch("deploymentScope");
+  const watchSystemName = form.watch("systemName");
+
+  useEffect(() => {
+    if (watchDeploymentScope === "INTERNAL") {
+      if (!form.getValues("directionType")) {
+        form.setValue("directionType", "ENTRY", {
+          shouldDirty: false,
+          shouldTouch: false,
+          shouldValidate: false,
+        });
+      }
+      return;
+    }
+
+    if (form.getValues("directionType") !== null) {
+      form.setValue("directionType", null, {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [form, watchDeploymentScope]);
+
   const saveMutation = useMutation({
-    mutationFn: async (payload: ControlRequest) =>
-      isEdit && controlId ? updateControl(controlId, payload) : createControl(payload),
+    mutationFn: async (payload: ControlRequest) => {
+      const normalizedPayload = {
+        ...payload,
+        code: payload.uniqueNumber.trim() || payload.code,
+        phoneExtension: "",
+      };
+
+      return isEdit && controlId ? updateControl(controlId, normalizedPayload) : createControl(normalizedPayload);
+    },
     onSuccess: (result) => {
       toast.success(t("editor.notifications.saved"));
       startTransition(() => navigate(`/controls/${result.id}/edit`, { replace: true }));
@@ -74,32 +275,78 @@ export function ControlEditorPage() {
     },
   });
 
-  const watchStatus = form.watch("status");
   const watchSms = form.watch("smsNotificationEnabled");
-  const steps: Array<{ id: EditorStep; number: number; title: string; subtitle: string }> = [
+  const watchUniqueNumber = form.watch("uniqueNumber");
+  const watchProcessStage = form.watch("processStage");
+  const watchConfidentiality = form.watch("confidentialityLevel");
+  const watchRuleCanvas = form.watch("ruleBuilderCanvas");
+  const watchControlName = form.watch("name");
+  const watchBasisFileName = form.watch("basisFileName");
+  const watchBasisFileSize = form.watch("basisFileSize");
+  const watchBasisFileContentType = form.watch("basisFileContentType");
+  const watchBasisFileBase64 = form.watch("basisFileBase64");
+  const watchBasisFileRemoved = form.watch("basisFileRemoved");
+  const watchHasStoredBasisFile = Boolean(detailQuery.data?.hasBasisFile) && !watchBasisFileRemoved && !watchBasisFileBase64;
+  const controlTypeLabels = {
+    WARNING: "Ogohlantrish",
+    BLOCK: "Taqiqlash",
+    ALLOW: "Istisno",
+  } as const;
+  const deploymentScopeLabels = {
+    INTERNAL: "Ichki",
+    EXTERNAL: "Tashqi",
+    HYBRID: t("editor.options.hybrid"),
+  } as const;
+  const directionTypeLabels = {
+    ENTRY: "Kirish",
+    EXIT: "Chiqish",
+  } as const;
+  const availableProcessStageOptions = useMemo(
+    () =>
+      buildProcessStageOptions(
+        processStagesQuery.data ?? [],
+        resolveProcessStageValue(watchProcessStage) || watchProcessStage,
+      ),
+    [processStagesQuery.data, watchProcessStage],
+  );
+  const normalizedDeploymentScope: DeploymentScope =
+    watchDeploymentScope === "EXTERNAL" ? "EXTERNAL" : "INTERNAL";
+  const availableSystemNameOptions = useMemo(
+    () => buildSystemNameOptions(systemTypesQuery.data ?? [], normalizedDeploymentScope, watchSystemName),
+    [normalizedDeploymentScope, systemTypesQuery.data, watchSystemName],
+  );
+
+  useEffect(() => {
+    const currentSystemName = form.getValues("systemName");
+    const defaultSystemName = getDefaultSystemName(systemTypesQuery.data ?? [], normalizedDeploymentScope);
+
+    if (!currentSystemName && defaultSystemName) {
+      form.setValue("systemName", defaultSystemName, {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+      return;
+    }
+
+    if (currentSystemName && !availableSystemNameOptions.includes(currentSystemName) && defaultSystemName) {
+      form.setValue("systemName", defaultSystemName, {
+        shouldDirty: true,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [availableSystemNameOptions, form, normalizedDeploymentScope, systemTypesQuery.data]);
+  const steps: Array<{ id: EditorStep; number: number; title: string }> = [
     {
       id: "overview",
       number: 1,
       title: t("editor.steps.overview.title"),
-      subtitle: t("editor.steps.overview.subtitle"),
-    },
-    {
-      id: "validity",
-      number: 2,
-      title: t("editor.steps.validity.title"),
-      subtitle: t("editor.steps.validity.subtitle"),
-    },
-    {
-      id: "messaging",
-      number: 3,
-      title: t("editor.steps.messaging.title"),
-      subtitle: t("editor.steps.messaging.subtitle"),
     },
     {
       id: "execution",
-      number: 4,
+      number: 2,
       title: t("editor.steps.execution.title"),
-      subtitle: t("editor.steps.execution.subtitle"),
     },
   ];
   const currentStepIndex = steps.findIndex((step) => step.id === currentStep);
@@ -122,118 +369,163 @@ export function ControlEditorPage() {
     setCurrentStep(steps[currentStepIndex + 1].id);
   };
 
+  const downloadBasisFileMutation = useMutation({
+    mutationFn: async () => {
+      if (!controlId) {
+        throw new Error("MN identifikatori topilmadi");
+      }
+
+      return downloadControlBasisFile(controlId);
+    },
+    onSuccess: (blob) => {
+      const fileName = watchBasisFileName || "mn-asosi";
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    },
+    onError: () => {
+      toast.error("Faylni yuklab bo'lmadi");
+    },
+  });
+
+  const handleBasisFileSelected = async (file: File) => {
+    try {
+      const base64 = await readFileAsBase64(file);
+      form.setValue("basisFileName", file.name, { shouldDirty: true, shouldTouch: true, shouldValidate: false });
+      form.setValue("basisFileContentType", file.type || "application/octet-stream", {
+        shouldDirty: true,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+      form.setValue("basisFileSize", file.size, { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+      form.setValue("basisFileBase64", base64, { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+      form.setValue("basisFileRemoved", false, { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+    } catch {
+      toast.error("Faylni o'qib bo'lmadi");
+    }
+  };
+
+  const handleBasisFileRemove = () => {
+    form.setValue("basisFileName", "", { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+    form.setValue("basisFileContentType", "", { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+    form.setValue("basisFileSize", null, { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+    form.setValue("basisFileBase64", null, { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+    form.setValue("basisFileRemoved", true, { shouldDirty: true, shouldTouch: false, shouldValidate: false });
+  };
+
   return (
     <div className="space-y-6">
-      <section className="px-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary/80">{t("appName")}</p>
-        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-              {isEdit ? t("editor.titleEdit") : t("editor.titleCreate")}
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">{t("editor.subtitle")}</p>
-          </div>
-          {isEdit ? (
-            <Button variant="outline" type="button" onClick={() => navigate(`/controls/${controlId}/builder`)}>
-              {t("editor.actions.builder")}
-            </Button>
-          ) : null}
-        </div>
-      </section>
-
       <form
-        className="space-y-6 [&_input]:h-11 [&_input]:rounded-[14px] [&_input]:px-4 [&_input]:text-[15px] [&_textarea]:min-h-24 [&_textarea]:rounded-[16px] [&_textarea]:px-4 [&_textarea]:py-3 [&_textarea]:text-[15px] [&_[data-slot=select-trigger]]:h-11 [&_[data-slot=select-trigger]]:rounded-[14px] [&_[data-slot=select-trigger]]:px-4 [&_[data-slot=select-trigger]]:text-[15px]"
+        className="space-y-6 [&_input]:h-11 [&_input]:rounded-[14px] [&_input]:px-4 [&_input]:text-[15px] [&_textarea]:min-h-24 [&_textarea]:rounded-[16px] [&_textarea]:px-4 [&_textarea]:py-3 [&_textarea]:text-[15px] [&_[data-slot=select-trigger]]:h-11 [&_[data-slot=select-trigger]]:w-full [&_[data-slot=select-trigger]]:rounded-[14px] [&_[data-slot=select-trigger]]:px-4 [&_[data-slot=select-trigger]]:text-[15px]"
         onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
       >
-        <section className="rounded-[30px] border border-border/70 bg-card/90 p-5 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.25)] backdrop-blur-xl md:p-6">
-            <div className="grid gap-4 md:grid-cols-4 md:gap-0">
-              {steps.map((step, index) => {
-                const isActive = currentStep === step.id;
-                const isCompleted = index < currentStepIndex;
-                const hasPreviousConnector = index > 0;
-                const hasNextConnector = index < steps.length - 1;
+        <Tabs
+          value={currentStep}
+          onValueChange={(value) => goToStep(value as EditorStep)}
+          className="items-center"
+        >
+          <TabsList className="relative mx-auto grid h-auto w-full max-w-xl grid-cols-2 gap-1.5 rounded-[20px] bg-[linear-gradient(180deg,rgba(218,226,237,0.98),rgba(205,214,226,0.88))] p-1 dark:bg-[linear-gradient(180deg,rgba(51,65,85,0.95),rgba(30,41,59,0.86))]">
+            {steps.map((step, index) => {
+              const isCompleted = index < currentStepIndex;
 
-                return (
-                  <button
-                    key={step.id}
-                    type="button"
-                    onClick={() => goToStep(step.id)}
-                    className="group relative flex flex-col items-start gap-3 rounded-[22px] px-3 py-2 text-left transition-all duration-200 hover:bg-primary/5 md:items-center md:px-0 md:text-center"
+              return (
+                <TabsTrigger
+                  key={step.id}
+                  value={step.id}
+                  className={cn(
+                    "relative z-10 flex h-auto min-h-[3.1rem] items-center justify-start gap-2.5 rounded-[16px] px-3.5 py-2 text-left data-[state=active]:shadow-none",
+                    currentStep === step.id ? "bg-transparent" : "bg-white/26 hover:bg-white/34",
+                  )}
+                >
+                    <span
+                      className={cn(
+                      "inline-flex h-7 min-w-7 shrink-0 aspect-square items-center justify-center rounded-full border text-[11px] leading-none font-semibold transition-all duration-300",
+                        currentStep === step.id
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : isCompleted
+                          ? "border-primary/70 bg-primary/10 text-primary"
+                          : "border-border/70 bg-background/90 text-muted-foreground",
+                    )}
                   >
-                    <div className="relative flex h-12 w-full items-center justify-center">
-                      {hasPreviousConnector ? (
-                        <span
-                          className={`absolute left-0 top-1/2 hidden h-[2px] w-1/2 -translate-y-1/2 md:block ${
-                            "bg-border/80"
-                          }`}
-                        />
-                      ) : null}
-                      {hasNextConnector ? (
-                        <span
-                          className={`absolute right-0 top-1/2 hidden h-[2px] w-1/2 -translate-y-1/2 md:block ${
-                            "bg-border/80"
-                          }`}
-                        />
-                      ) : null}
-                      <span
-                        className={`relative z-10 flex size-12 items-center justify-center rounded-full border text-base font-semibold transition-all duration-200 ${
-                          isActive
-                            ? "border-primary bg-primary text-primary-foreground shadow-[0_12px_22px_-16px_rgba(var(--primary-rgb),0.9)]"
-                            : isCompleted
-                              ? "border-primary bg-primary text-primary-foreground shadow-[0_10px_18px_-14px_rgba(var(--primary-rgb),0.85)]"
-                              : "border-border/70 bg-background text-muted-foreground group-hover:border-primary/30 group-hover:text-primary"
-                        }`}
-                      >
-                        {step.number}
-                      </span>
-                    </div>
-                    <div className="space-y-1 md:px-3">
-                      <p className={`text-sm font-semibold ${isActive ? "text-foreground" : "text-foreground/85"}`}>
-                        {step.title}
-                      </p>
-                      <p className="max-w-[14rem] text-xs leading-5 text-muted-foreground">{step.subtitle}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-        </section>
+                    {step.number}
+                  </span>
+                  <span className="text-[0.92rem] font-semibold leading-none">
+                    {step.title}
+                  </span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
 
         {currentStep === "overview" ? (
             <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <Card className="border-border/70 bg-card/90">
+              <Card className="overflow-visible border-border/70 bg-card/90">
                 <CardHeader>
-                  <CardTitle>{t("editor.sections.identity")}</CardTitle>
+                  <CardTitle>
+                    <span>Mantiqiy nazorat - </span>
+                    <span className="text-primary">{watchUniqueNumber || "LC20260000001"}</span>
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  <Field label={t("editor.fields.code")}>
-                    <Input {...form.register("code")} placeholder="MN-AT-001" />
-                  </Field>
-                  <Field label={t("editor.fields.uniqueNumber")}>
-                    <Input {...form.register("uniqueNumber")} placeholder="UNQ-AT-001" />
-                  </Field>
-                  <Field label={t("editor.fields.name")} className="md:col-span-2">
-                    <Input {...form.register("name")} />
-                  </Field>
-                  <Field label={t("editor.fields.objective")} className="md:col-span-2">
-                    <Textarea rows={5} {...form.register("objective")} />
-                  </Field>
+                <CardContent className="grid gap-4 lg:grid-cols-12">
+                  <Controller
+                    control={form.control}
+                    name="deploymentScope"
+                    render={({ field }) => (
+                      <Field label="Tizim turi" className="lg:col-span-3">
+                        <ChoiceCardRadioGroup
+                          name={field.name}
+                          value={field.value}
+                          onChange={field.onChange}
+                          options={[
+                            { value: "INTERNAL", label: deploymentScopeLabels.INTERNAL },
+                            { value: "EXTERNAL", label: deploymentScopeLabels.EXTERNAL },
+                          ]}
+                        />
+                      </Field>
+                    )}
+                  />
+                  {watchDeploymentScope === "INTERNAL" ? (
+                    <Controller
+                      control={form.control}
+                      name="directionType"
+                      render={({ field }) => (
+                        <Field label="Yo'nalish" className="lg:col-span-3">
+                          <ChoiceCardRadioGroup
+                            name={field.name}
+                            value={field.value ?? ""}
+                            onChange={(value) => field.onChange(value)}
+                            options={[
+                              { value: "ENTRY", label: directionTypeLabels.ENTRY },
+                              { value: "EXIT", label: directionTypeLabels.EXIT },
+                            ]}
+                          />
+                        </Field>
+                      )}
+                    />
+                  ) : null}
                   <Controller
                     control={form.control}
                     name="systemName"
                     render={({ field }) => (
-                      <Field label={t("editor.fields.systemName")}>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="AT">AT</SelectItem>
-                            <SelectItem value="EK">EK</SelectItem>
-                            <SelectItem value="RW">RW</SelectItem>
-                            <SelectItem value="EC">EC</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      <Field
+                        label="Tizim nomi"
+                        className={watchDeploymentScope === "INTERNAL" ? "lg:col-span-3" : "lg:col-span-5"}
+                      >
+                        <SearchableSelect
+                          value={field.value}
+                          onChange={field.onChange}
+                          options={availableSystemNameOptions}
+                          placeholder={
+                            systemTypesQuery.isLoading ? "Tizim nomlari yuklanmoqda..." : "Tizim nomini tanlang"
+                          }
+                          disabled={systemTypesQuery.isLoading}
+                        />
                       </Field>
                     )}
                   />
@@ -241,280 +533,175 @@ export function ControlEditorPage() {
                     control={form.control}
                     name="controlType"
                     render={({ field }) => (
-                      <Field label={t("editor.fields.controlType")}>
+                      <Field
+                        label="Mantiqiy nazorat turi"
+                        className={watchDeploymentScope === "INTERNAL" ? "lg:col-span-3" : "lg:col-span-4"}
+                      >
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger>
-                            <SelectValue />
+                          <SelectTrigger className="w-full">
+                            <span className="truncate">{controlTypeLabels[field.value]}</span>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="WARNING">{t("editor.options.warning")}</SelectItem>
-                            <SelectItem value="ALLOW">{t("editor.options.allow")}</SelectItem>
-                            <SelectItem value="BLOCK">{t("editor.options.block")}</SelectItem>
+                            <SelectItem value="WARNING">{controlTypeLabels.WARNING}</SelectItem>
+                            <SelectItem value="BLOCK">{controlTypeLabels.BLOCK}</SelectItem>
+                            <SelectItem value="ALLOW">{controlTypeLabels.ALLOW}</SelectItem>
                           </SelectContent>
                         </Select>
                       </Field>
                     )}
                   />
-                  <Field label={t("editor.fields.processStage")}>
-                    <Input {...form.register("processStage")} placeholder={t("editor.placeholders.processStage")} />
+                  <Field label="Mantiqiy nazorat nomi" className="lg:col-span-8">
+                    <Input {...form.register("name")} />
                   </Field>
-                  <Field label={t("editor.fields.authorName")}>
-                    <Input {...form.register("authorName")} />
-                  </Field>
-                  <Field label={t("editor.fields.responsibleDepartment")}>
-                    <Input {...form.register("responsibleDepartment")} list="departments" />
-                    <datalist id="departments">
-                      {(lookupsQuery.data?.dictionaries?.DEPARTMENT ?? []).map((item) => (
-                        <option key={item.code} value={item.labels.uzLatn} />
-                      ))}
-                    </datalist>
-                  </Field>
-                  <Field label={t("editor.fields.phoneExtension")}>
-                    <Input {...form.register("phoneExtension")} />
-                  </Field>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>{t("editor.sections.approvalState")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
                   <Controller
                     control={form.control}
-                    name="approvers"
+                    name="processStage"
                     render={({ field }) => (
-                      <Field label={t("editor.fields.approvers")}>
-                        <TagInput
+                      <Field label="Mantiqiy nazorat bosqichi" className="lg:col-span-4">
+                        <SearchableSelect
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder={t("editor.placeholders.approver")}
-                          addLabel={t("common.add")}
+                          options={availableProcessStageOptions}
+                          placeholder={
+                            processStagesQuery.isLoading ? "Bosqichlar yuklanmoqda..." : "Bosqichni tanlang"
+                          }
+                          disabled={processStagesQuery.isLoading}
                         />
                       </Field>
                     )}
                   />
-                  <Controller
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <Field label={t("editor.fields.status")}>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ACTIVE">{t("editor.options.active")}</SelectItem>
-                            <SelectItem value="SUSPENDED">{t("editor.options.suspended")}</SelectItem>
-                            <SelectItem value="CANCELLED">{t("editor.options.cancelled")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                    )}
-                  />
-                  {watchStatus === "SUSPENDED" ? (
-                    <Field label={t("editor.fields.suspendedUntil")}>
-                      <Input type="datetime-local" {...form.register("suspendedUntil")} />
+                  <Field label="Mantiqiy nazorat maqsadi" className="lg:col-span-12">
+                    <Textarea rows={5} {...form.register("objective")} />
+                  </Field>
+                  <Field label="Mantiqiy nazorat asosi" className="lg:col-span-12">
+                    <BasisFileDropzone
+                      fileName={watchBasisFileName}
+                      fileSize={watchBasisFileSize}
+                      hasStoredFile={watchHasStoredBasisFile}
+                      contentType={watchBasisFileContentType}
+                      onFileSelect={handleBasisFileSelected}
+                      onRemove={handleBasisFileRemove}
+                      onDownload={watchHasStoredBasisFile ? () => downloadBasisFileMutation.mutate() : undefined}
+                      downloading={downloadBasisFileMutation.isPending}
+                    />
+                  </Field>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-visible border-border/70 bg-card/90">
+                <CardHeader>
+                  <CardTitle>Mantiqiy nazorat parametrlari</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Boshlanish sana">
+                      <Input type="date" {...form.register("startDate")} />
                     </Field>
-                  ) : null}
-                  <Field label={t("editor.fields.priority")}>
-                    <Input type="number" {...form.register("priorityOrder", { valueAsNumber: true })} />
-                  </Field>
-                  <Field label={t("editor.fields.confidentiality")}>
-                    <Input {...form.register("confidentialityLevel")} placeholder={t("editor.placeholders.confidentiality")} />
-                  </Field>
-                  <Controller
-                    control={form.control}
-                    name="conflictMonitoringEnabled"
-                    render={({ field }) => (
-                      <div className="flex items-center justify-between rounded-[22px] border border-border/70 bg-background/80 px-4 py-3">
-                        <div>
-                          <p className="font-medium">{t("editor.toggles.conflictTitle")}</p>
-                          <p className="text-sm text-muted-foreground">{t("editor.toggles.conflictDescription")}</p>
-                        </div>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </div>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-        ) : null}
+                    <Field label="Yakunlanish sana">
+                      <Input type="date" {...form.register("finishDate")} />
+                    </Field>
+                  </div>
 
-        {currentStep === "validity" ? (
-            <div className="grid gap-6 xl:grid-cols-2">
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>{t("editor.sections.validity")}</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  <Field label={t("editor.fields.startDate")}>
-                    <Input type="date" {...form.register("startDate")} />
-                  </Field>
-                  <Field label={t("editor.fields.finishDate")}>
-                    <Input type="date" {...form.register("finishDate")} />
-                  </Field>
-                  <Field label={t("editor.fields.timeoutMs")}>
-                    <Input type="number" {...form.register("timeoutMs", { valueAsNumber: true })} />
-                  </Field>
-                  <Field label={t("editor.fields.lastExecutionDurationMs")}>
-                    <Input type="number" {...form.register("lastExecutionDurationMs", { valueAsNumber: true })} />
-                  </Field>
-                  <Field label={t("editor.fields.versionNumber")}>
-                    <Input type="number" {...form.register("versionNumber", { valueAsNumber: true })} />
-                  </Field>
-                  <Field label={t("editor.fields.autoCancelAfterDays")}>
-                    <Input type="number" {...form.register("autoCancelAfterDays", { valueAsNumber: true })} />
-                  </Field>
-                </CardContent>
-              </Card>
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>{t("editor.sections.scope")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Controller
-                    control={form.control}
-                    name="deploymentScope"
-                    render={({ field }) => (
-                      <Field label={t("editor.fields.deploymentScope")}>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="INTERNAL">{t("editor.options.internal")}</SelectItem>
-                            <SelectItem value="EXTERNAL">{t("editor.options.external")}</SelectItem>
-                            <SelectItem value="HYBRID">{t("editor.options.hybrid")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                    )}
-                  />
-                  <Controller
-                    control={form.control}
-                    name="territories"
-                    render={({ field }) => (
-                      <Field label={t("editor.fields.territories")}>
-                        <TagInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          placeholder={t("editor.placeholders.territory")}
-                          addLabel={t("common.add")}
-                        />
-                      </Field>
-                    )}
-                  />
-                  <Controller
-                    control={form.control}
-                    name="posts"
-                    render={({ field }) => (
-                      <Field label={t("editor.fields.posts")}>
-                        <TagInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          placeholder={t("editor.placeholders.post")}
-                          addLabel={t("common.add")}
-                        />
-                      </Field>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-        ) : null}
-
-        {currentStep === "messaging" ? (
-            <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>{t("editor.sections.messages")}</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <Field label={t("editor.messageLabels.uzCyrl")}>
-                    <Textarea rows={3} {...form.register("messages.uzCyrl")} />
-                  </Field>
-                  <Field label={t("editor.messageLabels.uzLatn")}>
-                    <Textarea rows={3} {...form.register("messages.uzLatn")} />
-                  </Field>
-                  <Field label={t("editor.messageLabels.ru")}>
-                    <Textarea rows={3} {...form.register("messages.ru")} />
-                  </Field>
-                  <Field label={t("editor.messageLabels.en")}>
-                    <Textarea rows={3} {...form.register("messages.en")} />
-                  </Field>
-                </CardContent>
-              </Card>
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>{t("editor.sections.smsHelp")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Controller
-                    control={form.control}
-                    name="smsNotificationEnabled"
-                    render={({ field }) => (
-                      <div className="flex items-center justify-between rounded-[22px] border border-border/70 bg-background/80 px-4 py-3">
-                        <div>
-                          <p className="font-medium">{t("editor.toggles.smsTitle")}</p>
-                          <p className="text-sm text-muted-foreground">{t("editor.toggles.smsDescription")}</p>
-                        </div>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </div>
-                    )}
-                  />
-                  {watchSms ? (
+                  <div className="space-y-4 rounded-[22px] border border-border/70 bg-background/80 p-4">
                     <Controller
                       control={form.control}
-                      name="smsPhones"
+                      name="smsNotificationEnabled"
                       render={({ field }) => (
-                        <Field label={t("editor.fields.smsPhones")}>
-                          <TagInput
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder={t("editor.placeholders.phone")}
-                            addLabel={t("common.add")}
-                          />
-                        </Field>
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="font-medium">SMS xabarnoma</p>
+                            <p className="text-sm text-muted-foreground">
+                              MN trigger bo'lganda telefonlarga yuborish.
+                            </p>
+                          </div>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </div>
                       )}
                     />
-                  ) : null}
+
+                    {watchSms ? (
+                      <Controller
+                        control={form.control}
+                        name="smsPhones"
+                        render={({ field }) => (
+                          <Field label="Telefonlar">
+                            <TagInput
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="+99890..."
+                              addLabel="Qo'shish"
+                            />
+                          </Field>
+                        )}
+                      />
+                    ) : null}
+                  </div>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-[18px] border border-border/70 bg-background/80 px-4 py-3 transition-all hover:border-primary/25 hover:bg-primary/4">
+                    <input
+                      type="checkbox"
+                      checked={watchConfidentiality === "Maxfiy"}
+                      onChange={(event) =>
+                        form.setValue(
+                          "confidentialityLevel",
+                          event.target.checked ? "Maxfiy" : "Maxfiy emas",
+                          {
+                            shouldDirty: true,
+                            shouldTouch: false,
+                            shouldValidate: false,
+                          },
+                        )
+                      }
+                      className="mt-0.5 size-4 accent-[var(--primary)]"
+                    />
+                    <div>
+                      <p className="font-medium text-foreground">Maxsus</p>
+                      <p className="text-sm text-muted-foreground">Maxfiy mantiqiy nazorat sifatida belgilash.</p>
+                    </div>
+                  </label>
                 </CardContent>
               </Card>
             </div>
         ) : null}
 
         {currentStep === "execution" ? (
-            <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>{t("editor.sections.ruleSummary")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {form.watch("rules").map((rule, index) => (
-                    <div key={`${rule.name}-${index}`} className="rounded-[20px] border border-border/70 bg-background/80 p-4">
-                      <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{rule.ruleType}</p>
-                      <p className="mt-2 font-semibold">{rule.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {rule.description || t("editor.executionTexts.noDescription")}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>{t("editor.sections.designerHandoff")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm leading-7 text-muted-foreground">{t("editor.executionTexts.handoffDescription")}</p>
-                  <Button type="button" variant="outline" onClick={() => navigate(isEdit ? `/controls/${controlId}/builder` : "/builder")}>
-                    {t("editor.executionTexts.openBuilder")}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+            <Card
+              className={cn(
+                "overflow-visible border-border/70 bg-card/90",
+                isBuilderExpanded
+                  ? "fixed inset-4 z-50 bg-background/96 shadow-[0_32px_90px_-28px_rgba(15,23,42,0.48)] backdrop-blur-xl"
+                  : "",
+              )}
+            >
+              <CardHeader className="flex flex-row items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Visual builder</CardTitle>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsBuilderExpanded((current) => !current)}
+                >
+                  {isBuilderExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  {isBuilderExpanded ? "Kichraytirish" : "Kattalashtirish"}
+                </Button>
+              </CardHeader>
+              <CardContent className={cn(isBuilderExpanded ? "h-[calc(100vh-8.5rem)]" : "")}>
+                <RuleCanvasEditor
+                  canvas={watchRuleCanvas}
+                  rootLabel={watchControlName || "Mantiqiy nazorat"}
+                  canvasHeightClassName={isBuilderExpanded ? "h-[calc(100vh-12rem)] min-h-0" : "h-[74vh] min-h-[680px]"}
+                  onCanvasChange={(ruleBuilderCanvas) =>
+                    form.setValue("ruleBuilderCanvas", ruleBuilderCanvas, {
+                      shouldDirty: true,
+                      shouldTouch: false,
+                      shouldValidate: false,
+                    })
+                  }
+                />
+              </CardContent>
+            </Card>
         ) : null}
 
         <section className="flex flex-col gap-4 rounded-[28px] border border-border/70 bg-card/80 px-5 py-4 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.22)] md:flex-row md:items-center md:justify-between">
@@ -565,4 +752,311 @@ function Field({
       {children}
     </div>
   );
+}
+
+function ChoiceCardRadioGroup({
+  name,
+  value,
+  onChange,
+  options,
+  columnsClassName = "",
+}: {
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  columnsClassName?: string;
+}) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-x-8 gap-y-2 pt-1", columnsClassName)}>
+      {options.map((option) => {
+        const checked = value === option.value;
+
+        return (
+          <label
+            key={option.value}
+            className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-foreground"
+          >
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={checked}
+              onChange={() => onChange(option.value)}
+              className="size-4 accent-[var(--primary)]"
+            />
+            <span>{option.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [openUpward, setOpenUpward] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const estimatedDropdownHeight = 390;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        setOpenUpward(spaceBelow < estimatedDropdownHeight && spaceAbove > spaceBelow);
+      }
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      setQuery("");
+      setOpenUpward(false);
+    }
+  }, [open]);
+
+  const filteredOptions = options.filter((option) => option.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          if (!disabled) {
+            setOpen((current) => !current);
+          }
+        }}
+        disabled={disabled}
+        className={cn(
+          "flex h-11 w-full items-center justify-between rounded-[14px] border border-input bg-transparent px-4 text-left text-[15px] transition-colors hover:border-primary/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+          disabled && "cursor-not-allowed bg-muted/40 text-muted-foreground hover:border-input",
+        )}
+      >
+        <span className={value ? "truncate text-foreground" : "truncate text-muted-foreground"}>
+          {value || placeholder}
+        </span>
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open ? (
+        <div
+          className={cn(
+            "absolute left-0 z-40 w-full overflow-hidden rounded-[18px] border border-border/75 bg-popover shadow-[0_26px_46px_-28px_rgba(15,23,42,0.34)]",
+            openUpward ? "bottom-[calc(100%+0.5rem)]" : "top-[calc(100%+0.5rem)]",
+          )}
+        >
+          <div className="border-b border-border/70 p-3">
+            <Input
+              ref={inputRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Qidirish..."
+              className="h-10 rounded-[12px] px-3"
+            />
+          </div>
+
+          <div className="max-h-[19.5rem] overflow-y-auto p-2">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    onChange(option);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-start justify-between gap-3 rounded-[12px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <span className="leading-6">{option}</span>
+                  {value === option ? <Check className="mt-0.5 size-4 shrink-0 text-primary" /> : null}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">Mos natija topilmadi</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function BasisFileDropzone({
+  fileName,
+  fileSize,
+  contentType,
+  hasStoredFile,
+  onFileSelect,
+  onRemove,
+  onDownload,
+  downloading = false,
+}: {
+  fileName: string;
+  fileSize: number | null;
+  contentType: string;
+  hasStoredFile: boolean;
+  onFileSelect: (file: File) => void | Promise<void>;
+  onRemove: () => void;
+  onDownload?: () => void;
+  downloading?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFiles = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) {
+      return;
+    }
+
+    await onFileSelect(file);
+  };
+
+  const handleInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    await handleFiles(event.target.files);
+    event.target.value = "";
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    await handleFiles(event.dataTransfer.files);
+  };
+
+  const hasFile = Boolean(fileName);
+
+  return (
+    <div className="space-y-3">
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
+        onChange={handleInputChange}
+      />
+
+      <div
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={handleDrop}
+        className={cn(
+          "rounded-[22px] border border-dashed px-5 py-6 transition-colors",
+          isDragging ? "border-primary bg-primary/5" : "border-border/70 bg-background/70",
+        )}
+      >
+        <div className="flex flex-col items-center justify-center gap-3 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Upload className="size-5" />
+          </div>
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">Faylni bu yerga tashlang yoki brauzer orqali tanlang</p>
+            <p className="text-sm text-muted-foreground">PDF, Word, Excel, TXT yoki rasm fayl yuklashingiz mumkin.</p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
+            Fayl tanlash
+          </Button>
+        </div>
+      </div>
+
+      {hasFile ? (
+        <div className="flex flex-col gap-3 rounded-[18px] border border-border/70 bg-background/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <FileText className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-medium text-foreground">{fileName}</p>
+              <p className="text-sm text-muted-foreground">
+                {[formatFileSize(fileSize), hasStoredFile && !contentType ? "Saqlangan fayl" : contentType]
+                  .filter(Boolean)
+                  .join(" • ")}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {hasStoredFile && onDownload ? (
+              <Button type="button" variant="outline" size="sm" onClick={onDownload} disabled={downloading}>
+                <Download className="size-4" />
+                {downloading ? "Yuklanmoqda..." : "Yuklab olish"}
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+              <Upload className="size-4" />
+              Almashtirish
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+              <X className="size-4" />
+              Olib tashlash
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatFileSize(size: number | null) {
+  if (!size || size <= 0) {
+    return "";
+  }
+
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Fayl ma'lumotini o'qib bo'lmadi"));
+        return;
+      }
+
+      const [, base64 = ""] = result.split(",");
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Faylni o'qishda xatolik"));
+    reader.readAsDataURL(file);
+  });
 }
