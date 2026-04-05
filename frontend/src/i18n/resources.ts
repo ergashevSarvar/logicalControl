@@ -5,7 +5,7 @@ export const resources = {
       nav: {
         dashboard: "Bosh sahifa",
         classifiers: "Tasniflagichlar",
-        controls: "MN Ro'yxati",
+        controls: "Mantiqiy nazoratlar",
         create: "MN yaratish",
         builder: "Visual Rule Builder",
         logs: "Logs va statistika",
@@ -163,8 +163,13 @@ export const resources = {
           builder: "Builder",
         },
         notifications: {
-          saved: "MN saqlandi",
+          created: "Mantiqiy nazorat saqlandi",
+          updated: "Mantiqiy nazorat ma'lumotlari yangilandi",
           saveFailed: "MN saqlanmadi",
+        },
+        validation: {
+          required: "Ushbu maydon majburiy",
+          dateRange: "Boshlanish sana yakunlanish sanasidan oldin bo'lishi kerak",
         },
       },
       builder: {
@@ -184,7 +189,7 @@ export const resources = {
       appName: "Мантиқий назорат",
       nav: {
         dashboard: "Бош саҳифа",
-        controls: "MN рўйхати",
+        controls: "Мантиқий назоратлар",
         create: "MN яратиш",
         builder: "Visual Rule Builder",
         logs: "Логлар ва статистика",
@@ -701,8 +706,13 @@ export const resources = {
           builder: "Builder",
         },
         notifications: {
-          saved: "MN saved",
+          created: "Logical control saved",
+          updated: "Logical control details updated",
           saveFailed: "Failed to save MN",
+        },
+        validation: {
+          required: "This field is required",
+          dateRange: "Start date must be earlier than finish date",
         },
       },
       builder: {

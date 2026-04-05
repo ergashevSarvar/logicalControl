@@ -28,7 +28,7 @@ const items = [
 const fallbackLabels: Record<(typeof items)[number]["key"], string> = {
   dashboard: "Bosh sahifa",
   classifiers: "Tasniflagichlar",
-  controls: "MN Ro'yxati",
+  controls: "Mantiqiy nazoratlar",
   create: "MN yaratish",
   builder: "Visual Rule Builder",
   logs: "Logs va statistika",

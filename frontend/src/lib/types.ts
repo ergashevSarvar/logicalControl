@@ -124,11 +124,15 @@ export interface ControlRule {
 export interface ControlListItem {
   id: string;
   code: string;
+  uniqueNumber: string;
   name: string;
   systemName: ControlSystem;
+  deploymentScope: DeploymentScope;
+  directionType: ControlDirection | null;
   controlType: ControlType;
   status: ControlStatus;
   processStage: string;
+  confidentialityLevel: string;
   priorityOrder: number | null;
   versionNumber: number;
   startDate: string | null;
@@ -195,6 +199,30 @@ export interface ControlRequest {
   copiedFromControlId: string | null;
   ruleBuilderCanvas: Record<string, unknown>;
   rules: ControlRule[];
+}
+
+export interface ControlOverviewRequest {
+  name: string;
+  objective: string;
+  basisFileName: string;
+  basisFileContentType: string;
+  basisFileSize: number | null;
+  basisFileBase64: string | null;
+  basisFileRemoved: boolean;
+  systemName: string;
+  startDate: string | null;
+  finishDate: string | null;
+  controlType: ControlType;
+  processStage: string;
+  smsNotificationEnabled: boolean;
+  smsPhones: string[];
+  deploymentScope: DeploymentScope;
+  directionType: ControlDirection | null;
+  confidentialityLevel: string;
+}
+
+export interface ControlUniqueNumberResponse {
+  uniqueNumber: string;
 }
 
 export interface ControlDetail extends ControlRequest {

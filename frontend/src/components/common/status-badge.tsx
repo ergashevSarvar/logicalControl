@@ -8,7 +8,7 @@ const statusMap: Record<ControlStatus, { label: string; variant: "default" | "se
 };
 
 const typeMap: Record<ControlType, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  WARNING: { label: "Ogohlantrish", variant: "secondary" },
+  WARNING: { label: "Ogohlantirish", variant: "secondary" },
   ALLOW: { label: "Istisno", variant: "default" },
   BLOCK: { label: "Taqiqlash", variant: "destructive" },
 };

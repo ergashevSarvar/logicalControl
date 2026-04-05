@@ -9,7 +9,9 @@ import type {
   ClassifierSystemTypeRequest,
   ControlDetail,
   ControlListItem,
+  ControlOverviewRequest,
   ControlRequest,
+  ControlUniqueNumberResponse,
   DashboardResponse,
   LoginResponse,
   LogsResponse,
@@ -63,13 +65,35 @@ export async function fetchDashboard() {
   return data;
 }
 
-export async function fetchControls(params?: { q?: string; status?: string; system?: string }) {
+export async function fetchControls(params?: {
+  q?: string;
+  deploymentScope?: string;
+  directionType?: string;
+  systemName?: string;
+  controlType?: string;
+  processStage?: string;
+}) {
   const { data } = await api.get<ControlListItem[]>("/controls", { params });
   return data;
 }
 
 export async function fetchControl(id: string) {
   const { data } = await api.get<ControlDetail>(`/controls/${id}`);
+  return data;
+}
+
+export async function fetchNextControlUniqueNumber() {
+  const { data } = await api.get<ControlUniqueNumberResponse>("/controls/next-unique-number");
+  return data;
+}
+
+export async function createControlOverview(payload: ControlOverviewRequest) {
+  const { data } = await api.post<ControlDetail>("/controls/overview", payload);
+  return data;
+}
+
+export async function updateControlOverview(id: string, payload: ControlOverviewRequest) {
+  const { data } = await api.put<ControlDetail>(`/controls/${id}/overview`, payload);
   return data;
 }
 

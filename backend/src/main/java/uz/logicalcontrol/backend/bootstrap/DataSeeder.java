@@ -83,7 +83,6 @@ public class DataSeeder implements CommandLineRunner {
         seedDictionaries();
         seedExceptions();
         seedClassifiers();
-        seedControls();
     }
 
     private void seedRolesAndAdmin() {

@@ -1,6 +1,6 @@
 import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -26,9 +26,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  createControlOverview,
   createControl,
   downloadControlBasisFile,
   fetchControl,
+  fetchNextControlUniqueNumber,
+  updateControlOverview,
   updateControl,
 } from "@/lib/api";
 import {
@@ -41,10 +44,27 @@ import {
   getDefaultSystemName,
   resolveProcessStageValue,
 } from "@/lib/classifiers";
-import { createDefaultControlRequest, type ControlRequest, type DeploymentScope } from "@/lib/types";
+import {
+  controlDetailToRequest,
+  createDefaultControlRequest,
+  type ControlDetail,
+  type ControlOverviewRequest,
+  type ControlRequest,
+  type DeploymentScope,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const stepIds = ["overview", "execution"] as const;
+const OVERVIEW_REQUIRED_FIELDS: Array<keyof ControlRequest> = [
+  "deploymentScope",
+  "systemName",
+  "controlType",
+  "name",
+  "processStage",
+  "objective",
+  "startDate",
+  "finishDate",
+];
 /*
 const deprecatedDepartmentNames = ["Risk boshqarmasi"] as const;
 const departmentOptions = [
@@ -157,10 +177,71 @@ const legacyProcessStageMap: Record<string, string> = {
   "14005 - Pop chegara posti",
   "14010 - Namangan TIF",
 ] as const; */
-function generateUniqueControlNumber() {
-  const year = new Date().getFullYear();
-  const serial = String(Date.now()).slice(-7);
-  return `LC${year}${serial}`;
+function buildOverviewRequest(values: ControlRequest): ControlOverviewRequest {
+  return {
+    name: values.name,
+    objective: values.objective,
+    basisFileName: values.basisFileName,
+    basisFileContentType: values.basisFileContentType,
+    basisFileSize: values.basisFileSize,
+    basisFileBase64: values.basisFileBase64,
+    basisFileRemoved: values.basisFileRemoved,
+    systemName: values.systemName,
+    startDate: values.startDate,
+    finishDate: values.finishDate,
+    controlType: values.controlType,
+    processStage: values.processStage,
+    smsNotificationEnabled: values.smsNotificationEnabled,
+    smsPhones: values.smsPhones,
+    deploymentScope: values.deploymentScope,
+    directionType: values.deploymentScope === "INTERNAL" ? values.directionType : null,
+    confidentialityLevel: values.confidentialityLevel,
+  };
+}
+
+function mergeAutosavedDetail(detail: ControlDetail, currentValues: ControlRequest): ControlDetail {
+  return {
+    ...detail,
+    approvers: currentValues.approvers,
+    messages: currentValues.messages,
+    authorName: currentValues.authorName,
+    responsibleDepartment: currentValues.responsibleDepartment,
+    status: currentValues.status,
+    phoneExtension: currentValues.phoneExtension,
+    priorityOrder: currentValues.priorityOrder,
+    versionNumber: currentValues.versionNumber,
+    timeoutMs: currentValues.timeoutMs,
+    lastExecutionDurationMs: currentValues.lastExecutionDurationMs,
+    territories: currentValues.territories,
+    posts: currentValues.posts,
+    autoCancelAfterDays: currentValues.autoCancelAfterDays,
+    conflictMonitoringEnabled: currentValues.conflictMonitoringEnabled,
+    copiedFromControlId: currentValues.copiedFromControlId,
+    ruleBuilderCanvas: currentValues.ruleBuilderCanvas,
+    rules: currentValues.rules,
+  };
+}
+
+function isDateRangeValid(startDate: string | null, finishDate: string | null) {
+  if (!startDate || !finishDate) {
+    return true;
+  }
+
+  return startDate < finishDate;
+}
+
+function shiftIsoDate(date: string | null, days: number) {
+  if (!date) {
+    return undefined;
+  }
+
+  const normalized = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(normalized.getTime())) {
+    return undefined;
+  }
+
+  normalized.setDate(normalized.getDate() + days);
+  return normalized.toISOString().slice(0, 10);
 }
 
 type EditorStep = (typeof stepIds)[number];
@@ -168,20 +249,37 @@ type EditorStep = (typeof stepIds)[number];
 export function ControlEditorPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const params = useParams();
-  const controlId = params.id;
-  const isEdit = Boolean(controlId);
+  const routeControlId = params.id ?? null;
   const [currentStep, setCurrentStep] = useState<EditorStep>("overview");
   const [isBuilderExpanded, setIsBuilderExpanded] = useState(false);
+  const [persistedControlId, setPersistedControlId] = useState<string | null>(routeControlId);
 
   const form = useForm<ControlRequest>({
     defaultValues: createDefaultControlRequest(),
   });
+  const requiredMessage = t("editor.validation.required", { defaultValue: "Ushbu maydon majburiy" });
+  const dateRangeMessage = t("editor.validation.dateRange", {
+    defaultValue: "Boshlanish sana yakunlanish sanasidan oldin bo'lishi kerak",
+  });
+
+  useEffect(() => {
+    setPersistedControlId(routeControlId);
+  }, [routeControlId]);
 
   const detailQuery = useQuery({
-    queryKey: ["control", controlId],
-    queryFn: () => fetchControl(controlId!),
-    enabled: isEdit,
+    queryKey: ["control", persistedControlId],
+    queryFn: () => fetchControl(persistedControlId!),
+    enabled: Boolean(persistedControlId),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
+  const nextUniqueNumberQuery = useQuery({
+    queryKey: ["controls", "nextUniqueNumber"],
+    queryFn: fetchNextControlUniqueNumber,
+    enabled: !persistedControlId,
+    staleTime: 0,
   });
   const processStagesQuery = useQuery({
     queryKey: classifierQueryKeys.processStages,
@@ -198,25 +296,21 @@ export function ControlEditorPage() {
 
   useEffect(() => {
     if (detailQuery.data) {
-      form.reset({
-        ...detailQuery.data,
-        basisFileBase64: null,
-        basisFileRemoved: false,
-      });
+      form.reset(controlDetailToRequest(detailQuery.data));
     }
   }, [detailQuery.data, form]);
 
   useEffect(() => {
-    if (isEdit || form.getValues("uniqueNumber")) {
+    if (persistedControlId || form.getValues("uniqueNumber") || !nextUniqueNumberQuery.data?.uniqueNumber) {
       return;
     }
 
-    form.setValue("uniqueNumber", generateUniqueControlNumber(), {
+    form.setValue("uniqueNumber", nextUniqueNumberQuery.data.uniqueNumber, {
       shouldDirty: false,
       shouldTouch: false,
       shouldValidate: false,
     });
-  }, [form, isEdit]);
+  }, [form, nextUniqueNumberQuery.data?.uniqueNumber, persistedControlId]);
 
   useEffect(() => {
     const currentStage = form.getValues("processStage");
@@ -256,18 +350,46 @@ export function ControlEditorPage() {
     }
   }, [form, watchDeploymentScope]);
 
+  const overviewAutosaveMutation = useMutation({
+    mutationFn: async (payload: ControlOverviewRequest) =>
+      persistedControlId ? updateControlOverview(persistedControlId, payload) : createControlOverview(payload),
+    onSuccess: (result) => {
+      const mergedResult = mergeAutosavedDetail(result, form.getValues());
+      setPersistedControlId(result.id);
+      queryClient.setQueryData(["control", result.id], mergedResult);
+      void queryClient.invalidateQueries({ queryKey: ["controls"] });
+      form.reset(controlDetailToRequest(mergedResult));
+      startTransition(() => navigate(`/controls/${result.id}/edit`, { replace: true }));
+    },
+    onError: () => {
+      toast.error(t("editor.notifications.saveFailed"));
+    },
+  });
+
   const saveMutation = useMutation({
     mutationFn: async (payload: ControlRequest) => {
+      const wasUpdate = Boolean(persistedControlId);
       const normalizedPayload = {
         ...payload,
         code: payload.uniqueNumber.trim() || payload.code,
         phoneExtension: "",
       };
 
-      return isEdit && controlId ? updateControl(controlId, normalizedPayload) : createControl(normalizedPayload);
+      const result = persistedControlId
+        ? await updateControl(persistedControlId, normalizedPayload)
+        : await createControl(normalizedPayload);
+
+      return { result, wasUpdate };
     },
-    onSuccess: (result) => {
-      toast.success(t("editor.notifications.saved"));
+    onSuccess: ({ result, wasUpdate }) => {
+      setPersistedControlId(result.id);
+      queryClient.setQueryData(["control", result.id], result);
+      void queryClient.invalidateQueries({ queryKey: ["controls"] });
+      toast.success(
+        wasUpdate
+          ? t("editor.notifications.updated", { defaultValue: "Mantiqiy nazorat ma'lumotlari yangilandi" })
+          : t("editor.notifications.created", { defaultValue: "Mantiqiy nazorat saqlandi" }),
+      );
       startTransition(() => navigate(`/controls/${result.id}/edit`, { replace: true }));
     },
     onError: () => {
@@ -286,6 +408,8 @@ export function ControlEditorPage() {
   const watchBasisFileContentType = form.watch("basisFileContentType");
   const watchBasisFileBase64 = form.watch("basisFileBase64");
   const watchBasisFileRemoved = form.watch("basisFileRemoved");
+  const watchStartDate = form.watch("startDate");
+  const watchFinishDate = form.watch("finishDate");
   const watchHasStoredBasisFile = Boolean(detailQuery.data?.hasBasisFile) && !watchBasisFileRemoved && !watchBasisFileBase64;
   const controlTypeLabels = {
     WARNING: "Ogohlantrish",
@@ -337,6 +461,14 @@ export function ControlEditorPage() {
       });
     }
   }, [availableSystemNameOptions, form, normalizedDeploymentScope, systemTypesQuery.data]);
+
+  useEffect(() => {
+    if (!watchStartDate && !watchFinishDate) {
+      return;
+    }
+
+    void form.trigger(["startDate", "finishDate"]);
+  }, [form, watchFinishDate, watchStartDate]);
   const steps: Array<{ id: EditorStep; number: number; title: string }> = [
     {
       id: "overview",
@@ -352,8 +484,36 @@ export function ControlEditorPage() {
   const currentStepIndex = steps.findIndex((step) => step.id === currentStep);
   const isLastStep = currentStepIndex === steps.length - 1;
   const isFirstStep = currentStepIndex === 0;
+  const isTransitionPending = overviewAutosaveMutation.isPending || saveMutation.isPending;
 
-  const goToStep = (step: EditorStep) => setCurrentStep(step);
+  const handleStepChange = async (step: EditorStep) => {
+    if (step === currentStep) {
+      return;
+    }
+
+    if (currentStep === "overview" && step === "execution") {
+      const fieldsToValidate: Array<keyof ControlRequest> =
+        watchDeploymentScope === "INTERNAL"
+          ? [...OVERVIEW_REQUIRED_FIELDS, "directionType"]
+          : OVERVIEW_REQUIRED_FIELDS;
+      const isValid = await form.trigger(fieldsToValidate, { shouldFocus: true });
+      if (!isValid) {
+        return;
+      }
+
+      try {
+        await overviewAutosaveMutation.mutateAsync(buildOverviewRequest(form.getValues()));
+      } catch {
+        return;
+      }
+    }
+
+    setCurrentStep(step);
+  };
+
+  const goToStep = (step: EditorStep) => {
+    void handleStepChange(step);
+  };
   const goToPreviousStep = () => {
     if (isFirstStep) {
       return;
@@ -366,16 +526,16 @@ export function ControlEditorPage() {
       return;
     }
 
-    setCurrentStep(steps[currentStepIndex + 1].id);
+    void handleStepChange(steps[currentStepIndex + 1].id);
   };
 
   const downloadBasisFileMutation = useMutation({
     mutationFn: async () => {
-      if (!controlId) {
+      if (!persistedControlId) {
         throw new Error("MN identifikatori topilmadi");
       }
 
-      return downloadControlBasisFile(controlId);
+      return downloadControlBasisFile(persistedControlId);
     },
     onSuccess: (blob) => {
       const fileName = watchBasisFileName || "mn-asosi";
@@ -437,6 +597,7 @@ export function ControlEditorPage() {
                 <TabsTrigger
                   key={step.id}
                   value={step.id}
+                  disabled={isTransitionPending}
                   className={cn(
                     "relative z-10 flex h-auto min-h-[3.1rem] items-center justify-start gap-2.5 rounded-[16px] px-3.5 py-2 text-left data-[state=active]:shadow-none",
                     currentStep === step.id ? "bg-transparent" : "bg-white/26 hover:bg-white/34",
@@ -476,8 +637,9 @@ export function ControlEditorPage() {
                   <Controller
                     control={form.control}
                     name="deploymentScope"
-                    render={({ field }) => (
-                      <Field label="Tizim turi" className="lg:col-span-3">
+                    rules={{ required: requiredMessage }}
+                    render={({ field, fieldState }) => (
+                      <Field label="Tizim turi" className="lg:col-span-3" error={fieldState.error?.message}>
                         <ChoiceCardRadioGroup
                           name={field.name}
                           value={field.value}
@@ -494,8 +656,9 @@ export function ControlEditorPage() {
                     <Controller
                       control={form.control}
                       name="directionType"
-                      render={({ field }) => (
-                        <Field label="Yo'nalish" className="lg:col-span-3">
+                      rules={{ required: requiredMessage }}
+                      render={({ field, fieldState }) => (
+                        <Field label="Yo'nalish" className="lg:col-span-3" error={fieldState.error?.message}>
                           <ChoiceCardRadioGroup
                             name={field.name}
                             value={field.value ?? ""}
@@ -512,10 +675,12 @@ export function ControlEditorPage() {
                   <Controller
                     control={form.control}
                     name="systemName"
-                    render={({ field }) => (
+                    rules={{ required: requiredMessage }}
+                    render={({ field, fieldState }) => (
                       <Field
                         label="Tizim nomi"
                         className={watchDeploymentScope === "INTERNAL" ? "lg:col-span-3" : "lg:col-span-5"}
+                        error={fieldState.error?.message}
                       >
                         <SearchableSelect
                           value={field.value}
@@ -525,6 +690,7 @@ export function ControlEditorPage() {
                             systemTypesQuery.isLoading ? "Tizim nomlari yuklanmoqda..." : "Tizim nomini tanlang"
                           }
                           disabled={systemTypesQuery.isLoading}
+                          hasError={Boolean(fieldState.error)}
                         />
                       </Field>
                     )}
@@ -532,13 +698,15 @@ export function ControlEditorPage() {
                   <Controller
                     control={form.control}
                     name="controlType"
-                    render={({ field }) => (
+                    rules={{ required: requiredMessage }}
+                    render={({ field, fieldState }) => (
                       <Field
                         label="Mantiqiy nazorat turi"
                         className={watchDeploymentScope === "INTERNAL" ? "lg:col-span-3" : "lg:col-span-4"}
+                        error={fieldState.error?.message}
                       >
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger className={cn("w-full", fieldState.error && "border-destructive focus-visible:ring-destructive/20")}>
                             <span className="truncate">{controlTypeLabels[field.value]}</span>
                           </SelectTrigger>
                           <SelectContent>
@@ -550,14 +718,26 @@ export function ControlEditorPage() {
                       </Field>
                     )}
                   />
-                  <Field label="Mantiqiy nazorat nomi" className="lg:col-span-8">
-                    <Input {...form.register("name")} />
+                  <Field
+                    label="Mantiqiy nazorat nomi"
+                    className="lg:col-span-8"
+                    error={form.formState.errors.name?.message}
+                  >
+                    <Input
+                      {...form.register("name", { required: requiredMessage })}
+                      className={form.formState.errors.name ? "border-destructive focus-visible:ring-destructive/20" : ""}
+                    />
                   </Field>
                   <Controller
                     control={form.control}
                     name="processStage"
-                    render={({ field }) => (
-                      <Field label="Mantiqiy nazorat bosqichi" className="lg:col-span-4">
+                    rules={{ required: requiredMessage }}
+                    render={({ field, fieldState }) => (
+                      <Field
+                        label="Mantiqiy nazorat bosqichi"
+                        className="lg:col-span-4"
+                        error={fieldState.error?.message}
+                      >
                         <SearchableSelect
                           value={field.value}
                           onChange={field.onChange}
@@ -566,12 +746,21 @@ export function ControlEditorPage() {
                             processStagesQuery.isLoading ? "Bosqichlar yuklanmoqda..." : "Bosqichni tanlang"
                           }
                           disabled={processStagesQuery.isLoading}
+                          hasError={Boolean(fieldState.error)}
                         />
                       </Field>
                     )}
                   />
-                  <Field label="Mantiqiy nazorat maqsadi" className="lg:col-span-12">
-                    <Textarea rows={5} {...form.register("objective")} />
+                  <Field
+                    label="Mantiqiy nazorat maqsadi"
+                    className="lg:col-span-12"
+                    error={form.formState.errors.objective?.message}
+                  >
+                    <Textarea
+                      rows={5}
+                      {...form.register("objective", { required: requiredMessage })}
+                      className={form.formState.errors.objective ? "border-destructive focus-visible:ring-destructive/20" : ""}
+                    />
                   </Field>
                   <Field label="Mantiqiy nazorat asosi" className="lg:col-span-12">
                     <BasisFileDropzone
@@ -594,11 +783,29 @@ export function ControlEditorPage() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="Boshlanish sana">
-                      <Input type="date" {...form.register("startDate")} />
+                    <Field label="Boshlanish sana" error={form.formState.errors.startDate?.message}>
+                      <Input
+                        type="date"
+                        max={shiftIsoDate(watchFinishDate, -1)}
+                        {...form.register("startDate", {
+                          required: requiredMessage,
+                          validate: (value) =>
+                            isDateRangeValid(value, form.getValues("finishDate")) || dateRangeMessage,
+                        })}
+                        className={form.formState.errors.startDate ? "border-destructive focus-visible:ring-destructive/20" : ""}
+                      />
                     </Field>
-                    <Field label="Yakunlanish sana">
-                      <Input type="date" {...form.register("finishDate")} />
+                    <Field label="Yakunlanish sana" error={form.formState.errors.finishDate?.message}>
+                      <Input
+                        type="date"
+                        min={shiftIsoDate(watchStartDate, 1)}
+                        {...form.register("finishDate", {
+                          required: requiredMessage,
+                          validate: (value) =>
+                            isDateRangeValid(form.getValues("startDate"), value) || dateRangeMessage,
+                        })}
+                        className={form.formState.errors.finishDate ? "border-destructive focus-visible:ring-destructive/20" : ""}
+                      />
                     </Field>
                   </div>
 
@@ -681,6 +888,7 @@ export function ControlEditorPage() {
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={isTransitionPending}
                   onClick={() => setIsBuilderExpanded((current) => !current)}
                 >
                   {isBuilderExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -716,18 +924,18 @@ export function ControlEditorPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="outline" onClick={goToPreviousStep} disabled={isFirstStep}>
+            <Button type="button" variant="outline" onClick={goToPreviousStep} disabled={isFirstStep || isTransitionPending}>
               <ChevronLeft className="size-4" />
               {t("editor.actions.back")}
             </Button>
             {!isLastStep ? (
-              <Button type="button" onClick={goToNextStep}>
+              <Button type="button" onClick={goToNextStep} disabled={isTransitionPending}>
                 {t("editor.actions.next")}
                 <ChevronRight className="size-4" />
               </Button>
             ) : (
-              <Button type="submit" disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? t("common.saving") : t("common.save")}
+              <Button type="submit" disabled={isTransitionPending}>
+                {isTransitionPending ? t("common.saving") : t("common.save")}
               </Button>
             )}
           </div>
@@ -741,15 +949,18 @@ function Field({
   label,
   children,
   className,
+  error,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  error?: string;
 }) {
   return (
     <div className={className}>
       <Label className="mb-2 inline-flex">{label}</Label>
       {children}
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
     </div>
   );
 }
@@ -799,12 +1010,14 @@ function SearchableSelect({
   options,
   placeholder,
   disabled = false,
+  hasError = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: string[];
   placeholder: string;
   disabled?: boolean;
+  hasError?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -853,6 +1066,7 @@ function SearchableSelect({
         disabled={disabled}
         className={cn(
           "flex h-11 w-full items-center justify-between rounded-[14px] border border-input bg-transparent px-4 text-left text-[15px] transition-colors hover:border-primary/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+          hasError && "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20",
           disabled && "cursor-not-allowed bg-muted/40 text-muted-foreground hover:border-input",
         )}
       >

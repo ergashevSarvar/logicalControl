@@ -35,8 +35,34 @@ public final class ControlDtos {
     ) {
     }
 
+    public record ControlUniqueNumber(
+        String uniqueNumber
+    ) {
+    }
+
+    public record ControlOverviewRequest(
+        String name,
+        String objective,
+        String basisFileName,
+        String basisFileContentType,
+        Long basisFileSize,
+        String basisFileBase64,
+        Boolean basisFileRemoved,
+        String systemName,
+        LocalDate startDate,
+        LocalDate finishDate,
+        LogicalControlEntity.ControlType controlType,
+        String processStage,
+        Boolean smsNotificationEnabled,
+        List<String> smsPhones,
+        LogicalControlEntity.DeploymentScope deploymentScope,
+        LogicalControlEntity.DirectionType directionType,
+        String confidentialityLevel
+    ) {
+    }
+
     public record ControlRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         String objective,
         String basisFileName,
@@ -48,12 +74,12 @@ public final class ControlDtos {
         List<String> approvers,
         LocalDate startDate,
         LocalDate finishDate,
-        @NotBlank String uniqueNumber,
+        String uniqueNumber,
         @NotNull LogicalControlEntity.ControlType controlType,
         @NotBlank String processStage,
-        @NotBlank String authorName,
-        @NotBlank String responsibleDepartment,
-        @NotNull LogicalControlEntity.ControlStatus status,
+        String authorName,
+        String responsibleDepartment,
+        LogicalControlEntity.ControlStatus status,
         LocalDateTime suspendedUntil,
         Map<String, String> messages,
         String phoneExtension,
@@ -79,11 +105,15 @@ public final class ControlDtos {
     public record ControlListItem(
         UUID id,
         String code,
+        String uniqueNumber,
         String name,
         String systemName,
+        LogicalControlEntity.DeploymentScope deploymentScope,
+        LogicalControlEntity.DirectionType directionType,
         LogicalControlEntity.ControlType controlType,
         LogicalControlEntity.ControlStatus status,
         String processStage,
+        String confidentialityLevel,
         Integer priorityOrder,
         Integer versionNumber,
         LocalDate startDate,

@@ -29,11 +29,16 @@ public class LogicalControlController {
 
     @GetMapping
     public ResponseEntity<List<ControlDtos.ControlListItem>> list(
-        @RequestParam(required = false) String q,
-        @RequestParam(required = false) String status,
-        @RequestParam(required = false) String system
+        @RequestParam(name = "q", required = false) String q,
+        @RequestParam(name = "deploymentScope", required = false) String deploymentScope,
+        @RequestParam(name = "directionType", required = false) String directionType,
+        @RequestParam(name = "systemName", required = false) String systemName,
+        @RequestParam(name = "controlType", required = false) String controlType,
+        @RequestParam(name = "processStage", required = false) String processStage
     ) {
-        return ResponseEntity.ok(logicalControlService.list(q, status, system));
+        return ResponseEntity.ok(
+            logicalControlService.list(q, deploymentScope, directionType, systemName, controlType, processStage)
+        );
     }
 
     @GetMapping("/{id}")
@@ -57,6 +62,28 @@ public class LogicalControlController {
                 "attachment; filename=\"" + (file.fileName() == null ? "mn-asos" : file.fileName()) + "\""
             )
             .body(resource);
+    }
+
+    @GetMapping("/next-unique-number")
+    public ResponseEntity<ControlDtos.ControlUniqueNumber> nextUniqueNumber() {
+        return ResponseEntity.ok(logicalControlService.nextUniqueNumber());
+    }
+
+    @PostMapping("/overview")
+    public ResponseEntity<ControlDtos.ControlDetail> createOverview(
+        @RequestBody ControlDtos.ControlOverviewRequest request,
+        Authentication authentication
+    ) {
+        return ResponseEntity.ok(logicalControlService.createOverview(request, authentication));
+    }
+
+    @PutMapping("/{id}/overview")
+    public ResponseEntity<ControlDtos.ControlDetail> updateOverview(
+        @PathVariable("id") UUID id,
+        @RequestBody ControlDtos.ControlOverviewRequest request,
+        Authentication authentication
+    ) {
+        return ResponseEntity.ok(logicalControlService.updateOverview(id, request, authentication));
     }
 
     @PostMapping

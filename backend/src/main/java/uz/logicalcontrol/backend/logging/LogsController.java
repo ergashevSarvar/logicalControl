@@ -18,7 +18,9 @@ public class LogsController {
 
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<LogsDtos.LogsResponse> list(@RequestParam(required = false) String result) {
+    public ResponseEntity<LogsDtos.LogsResponse> list(
+        @RequestParam(name = "result", required = false) String result
+    ) {
         var items = executionLogRepository.findTop40ByOrderByInstimeDesc().stream()
             .filter(log -> result == null || result.isBlank() || log.getResult().name().equalsIgnoreCase(result))
             .map(log -> new LogsDtos.LogItem(
