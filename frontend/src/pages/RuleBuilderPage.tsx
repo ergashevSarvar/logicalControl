@@ -89,6 +89,7 @@ export function RuleBuilderPage() {
       <RuleCanvasEditor
         canvas={draft.ruleBuilderCanvas}
         rootLabel={draft.name || "Mantiqiy nazorat"}
+        preferredSystemType={draft.systemName}
         onCanvasChange={(ruleBuilderCanvas) =>
           setDraft((current) =>
             areCanvasStatesEqual(current.ruleBuilderCanvas, ruleBuilderCanvas)

@@ -7,6 +7,7 @@ import type {
   ClassifierProcessStageRequest,
   ClassifierSystemType,
   ClassifierSystemTypeRequest,
+  ClassifierTable,
   ControlDetail,
   ControlListItem,
   ControlOverviewRequest,
@@ -171,6 +172,11 @@ export async function deleteClassifierProcessStage(id: string) {
 
 export async function fetchClassifierSystemTypes() {
   const { data } = await api.get<ClassifierSystemType[]>("/classifiers/system-types");
+  return data;
+}
+
+export async function fetchClassifierTables() {
+  const { data } = await api.get<ClassifierTable[]>("/classifiers/tables");
   return data;
 }
 

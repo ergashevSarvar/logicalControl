@@ -2,11 +2,13 @@ import {
   fetchClassifierDepartments,
   fetchClassifierProcessStages,
   fetchClassifierSystemTypes,
+  fetchClassifierTables,
 } from "@/lib/api";
 import type {
   ClassifierDepartment,
   ClassifierProcessStage,
   ClassifierSystemType,
+  ClassifierTable,
   DeploymentScope,
 } from "@/lib/types";
 
@@ -31,6 +33,7 @@ export const classifierQueryKeys = {
   departments: ["classifiers", "departments"] as const,
   processStages: ["classifiers", "processStages"] as const,
   systemTypes: ["classifiers", "systemTypes"] as const,
+  tables: ["classifiers", "tables"] as const,
 };
 
 export function sortClassifierDepartments(rows: ClassifierDepartment[]) {
@@ -47,6 +50,13 @@ export function sortClassifierSystemTypes(rows: ClassifierSystemType[]) {
   return [...rows].sort((left, right) => left.systemName.localeCompare(right.systemName, "uz"));
 }
 
+export function sortClassifierTables(rows: ClassifierTable[]) {
+  return [...rows].sort(
+    (left, right) =>
+      left.systemType.localeCompare(right.systemType, "uz") || left.tableName.localeCompare(right.tableName, "uz"),
+  );
+}
+
 export async function getClassifierDepartments() {
   return sortClassifierDepartments(await fetchClassifierDepartments());
 }
@@ -57,6 +67,10 @@ export async function getClassifierProcessStages() {
 
 export async function getClassifierSystemTypes() {
   return sortClassifierSystemTypes(await fetchClassifierSystemTypes());
+}
+
+export async function getClassifierTables() {
+  return sortClassifierTables(await fetchClassifierTables());
 }
 
 export function getDefaultDepartmentName(rows: ClassifierDepartment[]) {

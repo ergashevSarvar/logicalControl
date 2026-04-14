@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, FileText, Maximize2, Minimize2, Upload, X } from "lucide-react";
 
 import { TagInput } from "@/components/common/tag-input";
+import { DateInput } from "@/components/common/date-input";
 import { RuleCanvasEditor } from "@/components/rules/rule-canvas-editor";
 import {
   Tabs,
@@ -244,6 +245,15 @@ function shiftIsoDate(date: string | null, days: number) {
   return normalized.toISOString().slice(0, 10);
 }
 
+function isPdfFile(file: File) {
+  const normalizedName = file.name.trim().toLocaleLowerCase();
+  return file.type === "application/pdf" || normalizedName.endsWith(".pdf");
+}
+
+function areCanvasStatesEqual(left: Record<string, unknown>, right: Record<string, unknown>) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 type EditorStep = (typeof stepIds)[number];
 
 export function ControlEditorPage() {
@@ -259,10 +269,41 @@ export function ControlEditorPage() {
   const form = useForm<ControlRequest>({
     defaultValues: createDefaultControlRequest(),
   });
-  const requiredMessage = t("editor.validation.required", { defaultValue: "Ushbu maydon majburiy" });
   const dateRangeMessage = t("editor.validation.dateRange", {
     defaultValue: "Boshlanish sana yakunlanish sanasidan oldin bo'lishi kerak",
   });
+  const pdfOnlyMessage = t("editor.validation.basisFilePdfOnly", {
+    defaultValue: "Mantiqiy nazorat asosi uchun faqat PDF fayl yuklash mumkin",
+  });
+  const requiredMessages = {
+    deploymentScope: t("editor.validation.deploymentScopeRequired", {
+      defaultValue: "Tizim turini tanlash majburiy",
+    }),
+    directionType: t("editor.validation.directionTypeRequired", {
+      defaultValue: "Yo'nalishni tanlash majburiy",
+    }),
+    systemName: t("editor.validation.systemNameRequired", {
+      defaultValue: "Tizim nomini tanlash majburiy",
+    }),
+    controlType: t("editor.validation.controlTypeRequired", {
+      defaultValue: "Mantiqiy nazorat turini tanlash majburiy",
+    }),
+    name: t("editor.validation.nameRequired", {
+      defaultValue: "Mantiqiy nazorat nomini to'ldirish majburiy",
+    }),
+    processStage: t("editor.validation.processStageRequired", {
+      defaultValue: "Mantiqiy nazorat bosqichini tanlash majburiy",
+    }),
+    objective: t("editor.validation.objectiveRequired", {
+      defaultValue: "Mantiqiy nazorat maqsadini to'ldirish majburiy",
+    }),
+    startDate: t("editor.validation.startDateRequired", {
+      defaultValue: "Boshlanish sanasini kiritish majburiy",
+    }),
+    finishDate: t("editor.validation.finishDateRequired", {
+      defaultValue: "Yakunlanish sanasini kiritish majburiy",
+    }),
+  } satisfies Partial<Record<keyof ControlRequest, string>>;
 
   useEffect(() => {
     setPersistedControlId(routeControlId);
@@ -469,6 +510,11 @@ export function ControlEditorPage() {
 
     void form.trigger(["startDate", "finishDate"]);
   }, [form, watchFinishDate, watchStartDate]);
+
+  useEffect(() => {
+    setIsBuilderExpanded(currentStep === "execution");
+  }, [currentStep]);
+
   const steps: Array<{ id: EditorStep; number: number; title: string }> = [
     {
       id: "overview",
@@ -554,6 +600,11 @@ export function ControlEditorPage() {
   });
 
   const handleBasisFileSelected = async (file: File) => {
+    if (!isPdfFile(file)) {
+      toast.error(pdfOnlyMessage);
+      return;
+    }
+
     try {
       const base64 = await readFileAsBase64(file);
       form.setValue("basisFileName", file.name, { shouldDirty: true, shouldTouch: true, shouldValidate: false });
@@ -637,7 +688,7 @@ export function ControlEditorPage() {
                   <Controller
                     control={form.control}
                     name="deploymentScope"
-                    rules={{ required: requiredMessage }}
+                    rules={{ required: requiredMessages.deploymentScope }}
                     render={({ field, fieldState }) => (
                       <Field label="Tizim turi" className="lg:col-span-3" error={fieldState.error?.message}>
                         <ChoiceCardRadioGroup
@@ -656,7 +707,7 @@ export function ControlEditorPage() {
                     <Controller
                       control={form.control}
                       name="directionType"
-                      rules={{ required: requiredMessage }}
+                      rules={{ required: requiredMessages.directionType }}
                       render={({ field, fieldState }) => (
                         <Field label="Yo'nalish" className="lg:col-span-3" error={fieldState.error?.message}>
                           <ChoiceCardRadioGroup
@@ -675,7 +726,7 @@ export function ControlEditorPage() {
                   <Controller
                     control={form.control}
                     name="systemName"
-                    rules={{ required: requiredMessage }}
+                    rules={{ required: requiredMessages.systemName }}
                     render={({ field, fieldState }) => (
                       <Field
                         label="Tizim nomi"
@@ -698,7 +749,7 @@ export function ControlEditorPage() {
                   <Controller
                     control={form.control}
                     name="controlType"
-                    rules={{ required: requiredMessage }}
+                    rules={{ required: requiredMessages.controlType }}
                     render={({ field, fieldState }) => (
                       <Field
                         label="Mantiqiy nazorat turi"
@@ -724,14 +775,14 @@ export function ControlEditorPage() {
                     error={form.formState.errors.name?.message}
                   >
                     <Input
-                      {...form.register("name", { required: requiredMessage })}
+                      {...form.register("name", { required: requiredMessages.name })}
                       className={form.formState.errors.name ? "border-destructive focus-visible:ring-destructive/20" : ""}
                     />
                   </Field>
                   <Controller
                     control={form.control}
                     name="processStage"
-                    rules={{ required: requiredMessage }}
+                    rules={{ required: requiredMessages.processStage }}
                     render={({ field, fieldState }) => (
                       <Field
                         label="Mantiqiy nazorat bosqichi"
@@ -758,7 +809,7 @@ export function ControlEditorPage() {
                   >
                     <Textarea
                       rows={5}
-                      {...form.register("objective", { required: requiredMessage })}
+                      {...form.register("objective", { required: requiredMessages.objective })}
                       className={form.formState.errors.objective ? "border-destructive focus-visible:ring-destructive/20" : ""}
                     />
                   </Field>
@@ -783,30 +834,44 @@ export function ControlEditorPage() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="Boshlanish sana" error={form.formState.errors.startDate?.message}>
-                      <Input
-                        type="date"
-                        max={shiftIsoDate(watchFinishDate, -1)}
-                        {...form.register("startDate", {
-                          required: requiredMessage,
-                          validate: (value) =>
-                            isDateRangeValid(value, form.getValues("finishDate")) || dateRangeMessage,
-                        })}
-                        className={form.formState.errors.startDate ? "border-destructive focus-visible:ring-destructive/20" : ""}
-                      />
-                    </Field>
-                    <Field label="Yakunlanish sana" error={form.formState.errors.finishDate?.message}>
-                      <Input
-                        type="date"
-                        min={shiftIsoDate(watchStartDate, 1)}
-                        {...form.register("finishDate", {
-                          required: requiredMessage,
-                          validate: (value) =>
-                            isDateRangeValid(form.getValues("startDate"), value) || dateRangeMessage,
-                        })}
-                        className={form.formState.errors.finishDate ? "border-destructive focus-visible:ring-destructive/20" : ""}
-                      />
-                    </Field>
+                    <Controller
+                      control={form.control}
+                      name="startDate"
+                      rules={{
+                        required: requiredMessages.startDate,
+                        validate: (value) =>
+                          isDateRangeValid(value, form.getValues("finishDate")) || dateRangeMessage,
+                      }}
+                      render={({ field, fieldState }) => (
+                        <Field label="Boshlanish sana" error={fieldState.error?.message}>
+                          <DateInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            max={shiftIsoDate(watchFinishDate, -1)}
+                            className={fieldState.error ? "border-destructive focus-visible:ring-destructive/20" : ""}
+                          />
+                        </Field>
+                      )}
+                    />
+                    <Controller
+                      control={form.control}
+                      name="finishDate"
+                      rules={{
+                        required: requiredMessages.finishDate,
+                        validate: (value) =>
+                          isDateRangeValid(form.getValues("startDate"), value) || dateRangeMessage,
+                      }}
+                      render={({ field, fieldState }) => (
+                        <Field label="Yakunlanish sana" error={fieldState.error?.message}>
+                          <DateInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            min={shiftIsoDate(watchStartDate, 1)}
+                            className={fieldState.error ? "border-destructive focus-visible:ring-destructive/20" : ""}
+                          />
+                        </Field>
+                      )}
+                    />
                   </div>
 
                   <div className="space-y-4 rounded-[22px] border border-border/70 bg-background/80 p-4">
@@ -882,7 +947,7 @@ export function ControlEditorPage() {
             >
               <CardHeader className="flex flex-row items-center justify-between gap-3">
                 <div>
-                  <CardTitle>Visual builder</CardTitle>
+                  <CardTitle>{`Visual builder (${watchControlName || "Mantiqiy nazorat"})`}</CardTitle>
                 </div>
                 <Button
                   type="button"
@@ -898,14 +963,17 @@ export function ControlEditorPage() {
               <CardContent className={cn(isBuilderExpanded ? "h-[calc(100vh-8.5rem)]" : "")}>
                 <RuleCanvasEditor
                   canvas={watchRuleCanvas}
+                  preferredSystemType={form.watch("systemName")}
                   rootLabel={watchControlName || "Mantiqiy nazorat"}
                   canvasHeightClassName={isBuilderExpanded ? "h-[calc(100vh-12rem)] min-h-0" : "h-[74vh] min-h-[680px]"}
                   onCanvasChange={(ruleBuilderCanvas) =>
-                    form.setValue("ruleBuilderCanvas", ruleBuilderCanvas, {
-                      shouldDirty: true,
-                      shouldTouch: false,
-                      shouldValidate: false,
-                    })
+                    areCanvasStatesEqual(watchRuleCanvas, ruleBuilderCanvas)
+                      ? undefined
+                      : form.setValue("ruleBuilderCanvas", ruleBuilderCanvas, {
+                          shouldDirty: true,
+                          shouldTouch: false,
+                          shouldValidate: false,
+                        })
                   }
                 />
               </CardContent>
@@ -1169,7 +1237,7 @@ function BasisFileDropzone({
         ref={inputRef}
         type="file"
         className="hidden"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
+        accept="application/pdf,.pdf"
         onChange={handleInputChange}
       />
 
@@ -1194,7 +1262,7 @@ function BasisFileDropzone({
           </div>
           <div className="space-y-1">
             <p className="font-medium text-foreground">Faylni bu yerga tashlang yoki brauzer orqali tanlang</p>
-            <p className="text-sm text-muted-foreground">PDF, Word, Excel, TXT yoki rasm fayl yuklashingiz mumkin.</p>
+            <p className="text-sm text-muted-foreground">Faqat PDF fayl yuklashingiz mumkin.</p>
           </div>
           <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
             Fayl tanlash

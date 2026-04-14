@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchLogs } from "@/lib/api";
+import { formatIsoDate } from "@/lib/utils";
 
 export function LogsPage() {
   const [result, setResult] = useState<"ALL" | "POSITIVE" | "NEGATIVE">("ALL");
@@ -35,7 +36,7 @@ export function LogsPage() {
     const buckets = new Map<string, { label: string; positive: number; negative: number }>();
 
     items.forEach((item) => {
-      const label = new Date(item.instime).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const label = formatIsoDate(item.instime);
       if (!buckets.has(label)) {
         buckets.set(label, { label, positive: 0, negative: 0 });
       }

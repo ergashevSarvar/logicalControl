@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
+  Check,
+  ChevronDown,
   ClipboardList,
+  Database,
   Loader2,
   Pencil,
   Plus,
@@ -49,6 +52,7 @@ import {
   getClassifierDepartments,
   getClassifierProcessStages,
   getClassifierSystemTypes,
+  getClassifierTables,
   sortClassifierDepartments,
   sortClassifierProcessStages,
   sortClassifierSystemTypes,
@@ -60,12 +64,14 @@ import type {
   ClassifierProcessStageRequest,
   ClassifierSystemType,
   ClassifierSystemTypeRequest,
+  ClassifierTable,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type TabValue = "departments" | "stages" | "systemTypes";
+type TabValue = "departments" | "stages" | "systemTypes" | "tables";
 type DepartmentTypeFilter = "all" | (typeof departmentTypeOptions)[number];
 type SystemTypeScopeFilter = "all" | "Ichki" | "Tashqi";
+type TableSystemFilterValue = string;
 type EditorState =
   | { kind: "department"; mode: "create" | "edit"; id?: string }
   | { kind: "stage"; mode: "create" | "edit"; id?: string }
@@ -74,6 +80,7 @@ type DeleteState = { kind: "department" | "stage" | "systemType"; id: string; la
 
 const departmentTypeOptions = ["Boshqarma", "Bo'lim", "Sektor", "Laboratoriya"] as const;
 const systemScopeOptions = ["Ichki", "Tashqi"] as const;
+const ALL_FILTER_VALUE = "ALL";
 
 function createEmptyDepartmentForm(): ClassifierDepartmentRequest {
   return {
@@ -258,6 +265,172 @@ function SearchBox({ value, onChange }: { value: string; onChange: (value: strin
   );
 }
 
+function normalizeMultiValueSelection<T extends string>(
+  currentValues: T[],
+  toggledValue: T,
+  allValue: T,
+  totalSpecificOptionCount: number,
+) {
+  if (toggledValue === allValue) {
+    return [allValue];
+  }
+
+  const nextValues = currentValues.filter((value) => value !== allValue);
+  const existingIndex = nextValues.indexOf(toggledValue);
+
+  if (existingIndex >= 0) {
+    const filteredValues = nextValues.filter((value) => value !== toggledValue);
+    return filteredValues.length > 0 ? filteredValues : [allValue];
+  }
+
+  const expandedValues = [...nextValues, toggledValue];
+  if (expandedValues.length >= totalSpecificOptionCount) {
+    return [allValue];
+  }
+
+  return expandedValues;
+}
+
+function isAllFilterSelected(values: string[]) {
+  return values.includes(ALL_FILTER_VALUE);
+}
+
+function getNullableBadge(columnNullable: boolean | null) {
+  if (columnNullable === true) {
+    return {
+      label: "Ha",
+      variant: "secondary" as const,
+    };
+  }
+
+  if (columnNullable === false) {
+    return {
+      label: "Yo'q",
+      variant: "outline" as const,
+    };
+  }
+
+  return {
+    label: "Noma'lum",
+    variant: "outline" as const,
+  };
+}
+
+function AutocompleteMultiSelectFilter({
+  value,
+  onChange,
+  options,
+  allLabel,
+  placeholder,
+}: {
+  value: string[];
+  onChange: (nextValue: string[]) => void;
+  options: Array<{ value: string; label: string }>;
+  allLabel: string;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) {
+      return options;
+    }
+
+    return options.filter((option) => option.label.toLocaleLowerCase().includes(normalizedQuery));
+  }, [options, query]);
+
+  const triggerLabel = useMemo(() => {
+    if (isAllFilterSelected(value)) {
+      return allLabel;
+    }
+
+    const selectedLabels = options.filter((option) => value.includes(option.value)).map((option) => option.label);
+    if (selectedLabels.length <= 2) {
+      return selectedLabels.join(", ");
+    }
+
+    return `${selectedLabels.length} ta tanlandi`;
+  }, [allLabel, options, value]);
+
+  return (
+    <div ref={containerRef} className="relative w-full xl:w-[22rem]">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-11 w-full items-center justify-between rounded-[14px] border border-input bg-transparent px-4 text-left text-[15px] transition-colors hover:border-primary/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <span className="truncate">{triggerLabel}</span>
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open ? (
+        <div className="absolute top-[calc(100%+0.5rem)] left-0 z-40 w-full overflow-hidden rounded-[18px] border border-border/75 bg-popover shadow-[0_26px_46px_-28px_rgba(15,23,42,0.34)]">
+          <div className="border-b border-border/70 p-2.5">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={placeholder}
+                className="h-10 rounded-[12px] pl-9"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-[19.5rem] overflow-y-auto p-2">
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">Mos variant topilmadi</div>
+            ) : (
+              filteredOptions.map((option) => {
+                const checked = value.includes(option.value);
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() =>
+                      onChange(
+                        normalizeMultiValueSelection(value, option.value, ALL_FILTER_VALUE, options.length - 1),
+                      )
+                    }
+                    className="flex w-full items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <span className="truncate">{option.label}</span>
+                    <span
+                      className={cn(
+                        "flex size-4 items-center justify-center rounded border border-border/70",
+                        checked ? "border-primary bg-primary text-primary-foreground" : "bg-background",
+                      )}
+                    >
+                      {checked ? <Check className="size-3" /> : null}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ActionButtons({
   label,
   onEdit,
@@ -297,11 +470,13 @@ function ModalShell({
   title,
   description,
   onClose,
+  contentClassName,
   children,
 }: {
   title: string;
   description: string;
   onClose: () => void;
+  contentClassName?: string;
   children: React.ReactNode;
 }) {
   return createPortal(
@@ -313,7 +488,12 @@ function ModalShell({
         }
       }}
     >
-      <div className="w-full max-w-xl rounded-[28px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,249,255,0.92))] p-6 shadow-[0_28px_70px_-30px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(26,33,46,0.96),rgba(20,26,37,0.92))]">
+      <div
+        className={cn(
+          "w-full max-w-xl rounded-[28px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,249,255,0.92))] p-6 shadow-[0_28px_70px_-30px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(26,33,46,0.96),rgba(20,26,37,0.92))]",
+          contentClassName,
+        )}
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-xl font-semibold text-foreground">{title}</h3>
@@ -339,6 +519,9 @@ export function ClassifiersPage() {
   const [stageQuery, setStageQuery] = useState("");
   const [systemTypeQuery, setSystemTypeQuery] = useState("");
   const [systemTypeScopeFilter, setSystemTypeScopeFilter] = useState<SystemTypeScopeFilter>("all");
+  const [tableQuery, setTableQuery] = useState("");
+  const [tableSystemTypeFilter, setTableSystemTypeFilter] = useState<TableSystemFilterValue[]>([ALL_FILTER_VALUE]);
+  const [selectedTable, setSelectedTable] = useState<ClassifierTable | null>(null);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -366,6 +549,12 @@ export function ClassifiersPage() {
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 1000 * 60 * 60,
   });
+  const tablesQuery = useQuery({
+    queryKey: classifierQueryKeys.tables,
+    queryFn: getClassifierTables,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
 
   useEffect(() => {
     if (departmentsQuery.error) {
@@ -385,9 +574,25 @@ export function ClassifiersPage() {
     }
   }, [systemTypesQuery.error]);
 
+  useEffect(() => {
+    if (tablesQuery.error) {
+      toast.error(extractErrorMessage(tablesQuery.error, "Jadvallarni yuklab bo'lmadi."));
+    }
+  }, [tablesQuery.error]);
+
   const departments = departmentsQuery.data ?? [];
   const stages = stagesQuery.data ?? [];
   const systemTypes = systemTypesQuery.data ?? [];
+  const tables = tablesQuery.data ?? [];
+  const tableSystemTypeOptions = useMemo(
+    () => [
+      { value: ALL_FILTER_VALUE, label: "Barchasi" },
+      ...[...new Set(tables.map((item) => item.systemType))]
+        .sort((left, right) => left.localeCompare(right, "uz"))
+        .map((item) => ({ value: item, label: item })),
+    ],
+    [tables],
+  );
 
   const filteredDepartments = useMemo(() => {
     const query = departmentQuery.trim().toLocaleLowerCase();
@@ -426,7 +631,39 @@ export function ClassifiersPage() {
     });
   }, [systemTypeQuery, systemTypeScopeFilter, systemTypes]);
 
+  const filteredTables = useMemo(() => {
+    const query = tableQuery.trim().toLocaleLowerCase();
+    return tables.filter((row) =>
+      (isAllFilterSelected(tableSystemTypeFilter) || tableSystemTypeFilter.includes(row.systemType)) &&
+      (!query ||
+        `${row.tableName} ${row.description} ${row.systemType} ${row.columns.map((column) => `${column.name} ${column.description ?? ""}`).join(" ")}`
+          .toLocaleLowerCase()
+          .includes(query)),
+    );
+  }, [tableQuery, tableSystemTypeFilter, tables]);
+
+  useEffect(() => {
+    if (isAllFilterSelected(tableSystemTypeFilter)) {
+      return;
+    }
+
+    const availableValues = tableSystemTypeOptions.slice(1).map((option) => option.value);
+    const nextValues = tableSystemTypeFilter.filter((value) => availableValues.includes(value));
+    if (nextValues.length === 0) {
+      setTableSystemTypeFilter([ALL_FILTER_VALUE]);
+      return;
+    }
+
+    if (nextValues.length !== tableSystemTypeFilter.length) {
+      setTableSystemTypeFilter(nextValues);
+    }
+  }, [tableSystemTypeFilter, tableSystemTypeOptions]);
+
   function openCreateModal() {
+    if (activeTab === "tables") {
+      return;
+    }
+
     if (activeTab === "departments") {
       setDepartmentForm(createEmptyDepartmentForm());
       setEditorState({ kind: "department", mode: "create" });
@@ -626,6 +863,12 @@ export function ClassifiersPage() {
               className="h-10 min-w-[13rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
             >
               Tizim turlari
+            </TabsTrigger>
+            <TabsTrigger
+              value="tables"
+              className="h-10 min-w-[11rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
+            >
+              Jadvallar
             </TabsTrigger>
           </TabsList>
         </div>
@@ -878,23 +1121,193 @@ export function ClassifiersPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="tables">
+          <Card className="border-border/70 bg-card/90 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.2)]">
+            <CardContent className="space-y-5 p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <SectionHeader
+                  icon={Database}
+                  title={`Jadvallar (${filteredTables.length} ta)`}
+                />
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                  <AutocompleteMultiSelectFilter
+                    value={tableSystemTypeFilter}
+                    onChange={setTableSystemTypeFilter}
+                    options={tableSystemTypeOptions}
+                    allLabel="Barchasi"
+                    placeholder="Tizim turini qidiring"
+                  />
+                  <SearchBox value={tableQuery} onChange={setTableQuery} />
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/70">
+                <ScrollArea className="h-[34rem]">
+                  <Table>
+                    <TableHeader className="bg-muted/40">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-16 px-5">No</TableHead>
+                        <TableHead className="min-w-[16rem]">Jadval nomi</TableHead>
+                        <TableHead className="min-w-[26rem]">Jadval tavsifi</TableHead>
+                        <TableHead className="min-w-[14rem]">Tizim turi</TableHead>
+                        <TableHead className="min-w-[8rem]">Ustunlar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tablesQuery.isLoading ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={5} className="h-[20rem] px-5">
+                            <div className="flex items-center justify-center gap-3 text-muted-foreground">
+                              <Loader2 className="size-4 animate-spin" />
+                              <span>Ma'lumotlar yuklanmoqda...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredTables.length === 0 ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={5} className="px-0 py-0">
+                            <EmptyState
+                              title="Jadvallar topilmadi"
+                              description="Qidiruvni o'zgartirib ko'ring yoki metadata manbasini tekshiring."
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredTables.map((row, index) => (
+                          <TableRow key={row.tableName} className="bg-transparent">
+                            <TableCell className="px-5 font-semibold text-muted-foreground">{index + 1}</TableCell>
+                            <TableCell className="py-4 whitespace-normal">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTable(row)}
+                                className="cursor-pointer text-left text-sm font-semibold text-primary transition hover:underline"
+                              >
+                                {row.tableName}
+                              </button>
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              <p className="max-w-[42rem] text-sm leading-6 text-muted-foreground">{row.description}</p>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary" className="h-7 rounded-full px-3">
+                                {row.systemType}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="h-7 rounded-full px-3">
+                                {row.columns.length} ta
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
-      <Button
-        type="button"
-        size="icon-lg"
-        onClick={openCreateModal}
-        className="fixed right-8 bottom-8 z-40 size-16 rounded-full shadow-[0_26px_48px_-20px_rgba(var(--primary-rgb),0.65)]"
-        title={
-          activeTab === "departments"
-            ? "Yangi boshqarma qo'shish"
-            : activeTab === "stages"
-              ? "Yangi bosqich qo'shish"
-              : "Yangi tizim turi qo'shish"
-        }
-      >
-        <Plus className="size-7" />
-      </Button>
+      {activeTab !== "tables" ? (
+        <Button
+          type="button"
+          size="icon-lg"
+          onClick={openCreateModal}
+          className="fixed right-8 bottom-8 z-40 size-16 rounded-full shadow-[0_26px_48px_-20px_rgba(var(--primary-rgb),0.65)]"
+          title={
+            activeTab === "departments"
+              ? "Yangi boshqarma qo'shish"
+              : activeTab === "stages"
+                ? "Yangi bosqich qo'shish"
+                : "Yangi tizim turi qo'shish"
+          }
+        >
+          <Plus className="size-7" />
+        </Button>
+      ) : null}
+
+      {selectedTable ? (
+        <ModalShell
+          title={selectedTable.tableName}
+          description={`${selectedTable.systemType} tizimi uchun jadval ustunlari va tavsiflari`}
+          onClose={() => setSelectedTable(null)}
+          contentClassName="max-w-6xl"
+        >
+          <div className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-[18px] border border-border/70 bg-background/70 px-4 py-3">
+                <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">Jadval tavsifi</p>
+                <p className="mt-2 text-sm leading-6 text-foreground">{selectedTable.description}</p>
+              </div>
+              <div className="rounded-[18px] border border-border/70 bg-background/70 px-4 py-3">
+                <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">Tizim turi</p>
+                <p className="mt-2 text-sm leading-6 text-foreground">{selectedTable.systemType}</p>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/70">
+              <ScrollArea className="h-[24rem]">
+                <Table>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-16 px-5">No</TableHead>
+                      <TableHead className="min-w-[14rem]">Ustun nomi</TableHead>
+                      <TableHead className="min-w-[10rem]">Ma'lumot turi</TableHead>
+                      <TableHead className="min-w-[18rem]">Tavsif</TableHead>
+                      <TableHead className="min-w-[8rem]">Null</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedTable.columns.length === 0 ? (
+                      <TableRow className="bg-transparent hover:bg-transparent">
+                        <TableCell colSpan={5} className="px-0 py-0">
+                          <EmptyState
+                            title="Ustunlar topilmadi"
+                            description="Datasource ichida bu jadval uchun ustun metadata topilmadi."
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      selectedTable.columns.map((column) => (
+                        (() => {
+                          const nullableBadge = getNullableBadge(column.nullable);
+
+                          return (
+                            <TableRow key={`${selectedTable.tableName}-${column.name}`} className="bg-transparent">
+                              <TableCell className="px-5 font-semibold text-muted-foreground">{column.ordinalPosition}</TableCell>
+                              <TableCell className="py-4">
+                                <p className="text-sm font-semibold text-foreground">{column.name}</p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="h-7 rounded-full px-3">
+                                  {column.dataType}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="whitespace-normal">
+                                <p className="max-w-[28rem] text-sm leading-6 text-muted-foreground">
+                                  {column.description || "Tavsif kiritilmagan"}
+                                </p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={nullableBadge.variant} className="h-7 rounded-full px-3">
+                                  {nullableBadge.label}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })()
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
 
       {editorState ? (
         <ModalShell

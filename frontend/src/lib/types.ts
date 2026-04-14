@@ -110,6 +110,21 @@ export interface ClassifierSystemTypeRequest {
   active: boolean;
 }
 
+export interface ClassifierTableColumn {
+  name: string;
+  dataType: string;
+  description: string | null;
+  nullable: boolean | null;
+  ordinalPosition: number;
+}
+
+export interface ClassifierTable {
+  tableName: string;
+  description: string;
+  systemType: string;
+  columns: ClassifierTableColumn[];
+}
+
 export interface ControlRule {
   id?: string;
   name: string;

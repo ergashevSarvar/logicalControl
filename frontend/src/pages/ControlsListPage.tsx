@@ -1,6 +1,6 @@
-import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, PencilLine, Plus, Route, Shield } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, PencilLine, Plus, Route, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { SystemBadge, TypeBadge } from "@/components/common/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,12 +34,9 @@ import {
   getClassifierSystemTypes,
 } from "@/lib/classifiers";
 import type { ControlDirection, ControlSystem, ControlType, DeploymentScope } from "@/lib/types";
+import { cn, formatIsoDate } from "@/lib/utils";
 
-const dateFormatter = new Intl.DateTimeFormat("uz-UZ", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
+const ALL_FILTER_VALUE = "ALL" as const;
 
 const scopeLabels: Record<DeploymentScope, string> = {
   INTERNAL: "Ichki",
@@ -52,17 +49,42 @@ const directionLabels: Record<ControlDirection, string> = {
   EXIT: "Chiqish",
 };
 
+function normalizeMultiValueSelection<T extends string>(
+  currentValues: T[],
+  toggledValue: T,
+  allValue: T,
+  totalSpecificOptionCount: number,
+) {
+  if (toggledValue === allValue) {
+    return [allValue];
+  }
+
+  const nextValues = currentValues.filter((value) => value !== allValue);
+  const existingIndex = nextValues.indexOf(toggledValue);
+
+  if (existingIndex >= 0) {
+    const filteredValues = nextValues.filter((value) => value !== toggledValue);
+    return filteredValues.length > 0 ? filteredValues : [allValue];
+  }
+
+  const expandedValues = [...nextValues, toggledValue];
+  if (expandedValues.length >= totalSpecificOptionCount) {
+    return [allValue];
+  }
+
+  return expandedValues;
+}
+
+function isAllFilterSelected(values: string[]) {
+  return values.includes(ALL_FILTER_VALUE);
+}
+
+function areSameSelections(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 function formatDate(date: string | null) {
-  if (!date) {
-    return "Belgilanmagan";
-  }
-
-  const normalized = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(normalized.getTime())) {
-    return "Belgilanmagan";
-  }
-
-  return dateFormatter.format(normalized);
+  return formatIsoDate(date);
 }
 
 function formatDateRange(startDate: string | null, finishDate: string | null) {
@@ -73,11 +95,141 @@ function isConfidential(level: string | null | undefined) {
   return level?.trim().toLowerCase() === "maxfiy";
 }
 
+function buildPaginationItems(currentPage: number, totalPages: number) {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages = new Set<number>([1, totalPages, currentPage, currentPage - 1, currentPage + 1]);
+  if (currentPage <= 3) {
+    pages.add(2);
+    pages.add(3);
+    pages.add(4);
+  }
+  if (currentPage >= totalPages - 2) {
+    pages.add(totalPages - 1);
+    pages.add(totalPages - 2);
+    pages.add(totalPages - 3);
+  }
+
+  const sortedPages = [...pages]
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((left, right) => left - right);
+
+  const items: Array<number | "ellipsis"> = [];
+  sortedPages.forEach((page, index) => {
+    if (index > 0 && page - sortedPages[index - 1] > 1) {
+      items.push("ellipsis");
+    }
+    items.push(page);
+  });
+
+  return items;
+}
+
 function FilterField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 space-y-2">
-      <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</Label>
+      <Label className="text-[13px] font-medium tracking-normal text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function MultiSelectFilter({
+  value,
+  onChange,
+  options,
+  allLabel,
+  disabled = false,
+}: {
+  value: string[];
+  onChange: (nextValue: string[]) => void;
+  options: Array<{ value: string; label: string }>;
+  allLabel: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  const triggerLabel = useMemo(() => {
+    if (isAllFilterSelected(value)) {
+      return allLabel;
+    }
+
+    const selectedLabels = options
+      .filter((option) => value.includes(option.value))
+      .map((option) => option.label);
+
+    if (selectedLabels.length <= 2) {
+      return selectedLabels.join(", ");
+    }
+
+    return `${selectedLabels.length} ta tanlandi`;
+  }, [allLabel, options, value]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          if (!disabled) {
+            setOpen((current) => !current);
+          }
+        }}
+        disabled={disabled}
+        className={cn(
+          "flex h-11 w-full items-center justify-between rounded-[14px] border border-input bg-transparent px-4 text-left text-[15px] transition-colors hover:border-primary/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+          disabled && "cursor-not-allowed bg-muted/40 text-muted-foreground hover:border-input",
+        )}
+      >
+        <span className="truncate">{triggerLabel}</span>
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open ? (
+        <div className="absolute top-[calc(100%+0.5rem)] left-0 z-40 w-full overflow-hidden rounded-[18px] border border-border/75 bg-popover shadow-[0_26px_46px_-28px_rgba(15,23,42,0.34)]">
+          <div className="max-h-[19.5rem] overflow-y-auto p-2">
+            {options.map((option) => {
+              const checked = value.includes(option.value);
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() =>
+                    onChange(
+                      normalizeMultiValueSelection(value, option.value, ALL_FILTER_VALUE, options.length - 1),
+                    )
+                  }
+                  className="flex w-full items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <span className="truncate">{option.label}</span>
+                  <span
+                    className={cn(
+                      "flex size-4 items-center justify-center rounded border border-border/70",
+                      checked ? "border-primary bg-primary text-primary-foreground" : "bg-background",
+                    )}
+                  >
+                    {checked ? <Check className="size-3" /> : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -87,12 +239,40 @@ export function ControlsListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [deploymentScope, setDeploymentScope] = useState<DeploymentScope | "ALL">("ALL");
-  const [directionType, setDirectionType] = useState<ControlDirection | "ALL">("ALL");
-  const [systemName, setSystemName] = useState<ControlSystem | "ALL">("ALL");
-  const [controlType, setControlType] = useState<ControlType | "ALL">("ALL");
-  const [processStage, setProcessStage] = useState<string>("ALL");
+  const [deploymentScope, setDeploymentScope] = useState<Array<DeploymentScope | typeof ALL_FILTER_VALUE>>([ALL_FILTER_VALUE]);
+  const [directionType, setDirectionType] = useState<Array<ControlDirection | typeof ALL_FILTER_VALUE>>([ALL_FILTER_VALUE]);
+  const [systemName, setSystemName] = useState<Array<ControlSystem | typeof ALL_FILTER_VALUE>>([ALL_FILTER_VALUE]);
+  const [controlType, setControlType] = useState<Array<ControlType | typeof ALL_FILTER_VALUE>>([ALL_FILTER_VALUE]);
+  const [processStage, setProcessStage] = useState<string[]>([ALL_FILTER_VALUE]);
+  const [pageSize, setPageSize] = useState("10");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pendingDuplicateControl, setPendingDuplicateControl] = useState<{ id: string; code: string } | null>(null);
   const deferredSearch = useDeferredValue(search);
+  const allLabel = t("controls.filters.all", { defaultValue: "Barchasi" });
+  const searchPlaceholder = t("controls.filters.searchPlaceholder", { defaultValue: "LC raqami yoki nomi" });
+  const deploymentScopeLabel = t("controls.filters.deploymentScope", { defaultValue: "Tizim turi" });
+  const directionTypeLabel = t("controls.filters.directionType", { defaultValue: "Yo'nalish" });
+  const systemNameLabel = t("controls.filters.systemName", { defaultValue: "Tizim nomi" });
+  const controlTypeLabel = t("controls.filters.controlType", { defaultValue: "Mantiqiy nazorat turi" });
+  const processStageLabel = t("controls.filters.processStage", { defaultValue: "Mantiqiy nazorat bosqichi" });
+  const resetFiltersLabel = t("controls.filters.reset", { defaultValue: "Filtrlarni tozalash" });
+
+  const deploymentScopeOptions: Array<{ value: DeploymentScope | typeof ALL_FILTER_VALUE; label: string }> = [
+    { value: ALL_FILTER_VALUE, label: allLabel },
+    { value: "INTERNAL", label: "Ichki" },
+    { value: "EXTERNAL", label: "Tashqi" },
+  ];
+  const directionTypeOptions: Array<{ value: ControlDirection | typeof ALL_FILTER_VALUE; label: string }> = [
+    { value: ALL_FILTER_VALUE, label: allLabel },
+    { value: "ENTRY", label: "Kirish" },
+    { value: "EXIT", label: "Chiqish" },
+  ];
+  const controlTypeOptions: Array<{ value: ControlType | typeof ALL_FILTER_VALUE; label: string }> = [
+    { value: ALL_FILTER_VALUE, label: allLabel },
+    { value: "BLOCK", label: "Taqiqlash" },
+    { value: "WARNING", label: "Ogohlantirish" },
+    { value: "ALLOW", label: "Istisno" },
+  ];
 
   const systemTypesQuery = useQuery({
     queryKey: classifierQueryKeys.systemTypes,
@@ -109,12 +289,12 @@ export function ControlsListPage() {
 
   const availableSystems = useMemo(() => {
     const rows = (systemTypesQuery.data ?? []).filter((item) => item.active);
-    if (deploymentScope === "ALL") {
+    if (isAllFilterSelected(deploymentScope)) {
       return [...new Set(rows.map((item) => item.systemName))];
     }
 
-    const scopeLabel = deploymentScope === "EXTERNAL" ? "Tashqi" : "Ichki";
-    return [...new Set(rows.filter((item) => item.scopeType === scopeLabel).map((item) => item.systemName))];
+    const scopeLabelsToMatch: string[] = deploymentScope.map((scope) => (scope === "EXTERNAL" ? "Tashqi" : "Ichki"));
+    return [...new Set(rows.filter((item) => scopeLabelsToMatch.includes(item.scopeType)).map((item) => item.systemName))];
   }, [deploymentScope, systemTypesQuery.data]);
   const availableProcessStages = useMemo(
     () => (processStagesQuery.data ?? []).filter((item) => item.active).map((item) => item.name),
@@ -122,27 +302,28 @@ export function ControlsListPage() {
   );
 
   useEffect(() => {
-    if (deploymentScope !== "INTERNAL" && directionType !== "ALL") {
-      setDirectionType("ALL");
+    if (!isAllFilterSelected(deploymentScope) && !deploymentScope.includes("INTERNAL") && !isAllFilterSelected(directionType)) {
+      setDirectionType([ALL_FILTER_VALUE]);
     }
   }, [deploymentScope, directionType]);
 
   useEffect(() => {
-    if (systemName !== "ALL" && !availableSystems.includes(systemName)) {
-      setSystemName("ALL");
+    if (isAllFilterSelected(systemName)) {
+      return;
+    }
+
+    const nextValues = systemName.filter((value) => availableSystems.includes(value));
+    const normalizedValues = nextValues.length > 0 ? nextValues : [ALL_FILTER_VALUE];
+    if (!areSameSelections(systemName, normalizedValues)) {
+      setSystemName(normalizedValues);
     }
   }, [availableSystems, systemName]);
 
   const controlsQuery = useQuery({
-    queryKey: ["controls", deferredSearch, deploymentScope, directionType, systemName, controlType, processStage],
+    queryKey: ["controls", deferredSearch],
     queryFn: () =>
       fetchControls({
         q: deferredSearch || undefined,
-        deploymentScope: deploymentScope === "ALL" ? undefined : deploymentScope,
-        directionType: directionType === "ALL" ? undefined : directionType,
-        systemName: systemName === "ALL" ? undefined : systemName,
-        controlType: controlType === "ALL" ? undefined : controlType,
-        processStage: processStage === "ALL" ? undefined : processStage,
       }),
   });
 
@@ -150,236 +331,381 @@ export function ControlsListPage() {
     mutationFn: duplicateControl,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["controls"] });
-      toast.success("MN duplicated");
+      setPendingDuplicateControl(null);
+      toast.success(t("controls.duplicate.success", { defaultValue: "Mantiqiy nazorat nusxalandi" }));
+    },
+    onError: () => {
+      toast.error(t("controls.duplicate.error", { defaultValue: "Mantiqiy nazoratni nusxalab bo'lmadi" }));
     },
   });
 
-  const rows = controlsQuery.data ?? [];
+  const rows = useMemo(() => {
+    const sourceRows = controlsQuery.data ?? [];
+
+    return sourceRows.filter((item) => {
+      const deploymentScopeMatches =
+        isAllFilterSelected(deploymentScope) || deploymentScope.includes(item.deploymentScope);
+      const directionTypeMatches =
+        isAllFilterSelected(directionType) || (item.directionType ? directionType.includes(item.directionType) : false);
+      const systemNameMatches = isAllFilterSelected(systemName) || systemName.includes(item.systemName);
+      const controlTypeMatches = isAllFilterSelected(controlType) || controlType.includes(item.controlType);
+      const processStageMatches = isAllFilterSelected(processStage) || processStage.includes(item.processStage);
+
+      return (
+        deploymentScopeMatches &&
+        directionTypeMatches &&
+        systemNameMatches &&
+        controlTypeMatches &&
+        processStageMatches
+      );
+    });
+  }, [controlType, controlsQuery.data, deploymentScope, directionType, processStage, systemName]);
+  const totalRows = rows.length;
+  const parsedPageSize = Number(pageSize);
+  const totalPages = Math.max(1, Math.ceil(totalRows / parsedPageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = totalRows === 0 ? 0 : (safeCurrentPage - 1) * parsedPageSize;
+  const pageEndIndex = Math.min(pageStartIndex + parsedPageSize, totalRows);
+  const paginatedRows = rows.slice(pageStartIndex, pageEndIndex);
+  const paginationItems = buildPaginationItems(safeCurrentPage, totalPages);
 
   const resetFilters = () => {
     setSearch("");
-    setDeploymentScope("ALL");
-    setDirectionType("ALL");
-    setSystemName("ALL");
-    setControlType("ALL");
-    setProcessStage("ALL");
+    setDeploymentScope([ALL_FILTER_VALUE]);
+    setDirectionType([ALL_FILTER_VALUE]);
+    setSystemName([ALL_FILTER_VALUE]);
+    setControlType([ALL_FILTER_VALUE]);
+    setProcessStage([ALL_FILTER_VALUE]);
+    setCurrentPage(1);
   };
+
+  const openDuplicateDialog = (id: string, code: string) => {
+    setPendingDuplicateControl({ id, code });
+  };
+
+  const confirmDuplicate = () => {
+    if (!pendingDuplicateControl) {
+      return;
+    }
+
+    duplicateMutation.mutate(pendingDuplicateControl.id);
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredSearch, deploymentScope, directionType, systemName, controlType, processStage, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Mantiqiy nazoratlar"
-        subtitle="Saqlangan mantiqiy nazoratlarni filtrlang, ko'ring va boshqaring."
+        title={`Mantiqiy nazoratlar (${totalRows} ta)`}
+        titleClassName="text-[1.6rem] md:text-[1.9rem]"
+        showLogo={false}
         actions={
-          <Button onClick={() => navigate("/controls/new")}>
-            <Plus className="size-4" />
-            {t("controls.add")}
-          </Button>
+          <>
+            <Button type="button" variant="outline" onClick={resetFilters}>
+              {resetFiltersLabel}
+            </Button>
+            <Button onClick={() => navigate("/controls/new")}>
+              <Plus className="size-4" />
+              {t("controls.add")}
+            </Button>
+          </>
         }
       >
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <FilterField label="Qidirish">
-              <Input
-                className="w-full"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="LC raqami yoki nomi"
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <FilterField label={deploymentScopeLabel}>
+              <MultiSelectFilter
+                value={deploymentScope}
+                onChange={(nextValue) => setDeploymentScope(nextValue as Array<DeploymentScope | typeof ALL_FILTER_VALUE>)}
+                options={deploymentScopeOptions}
+                allLabel={allLabel}
               />
             </FilterField>
-            <FilterField label="Tizim turi">
-              <Select
-                value={deploymentScope}
-                onValueChange={(value) => setDeploymentScope((value ?? "ALL") as DeploymentScope | "ALL")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Barchasi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Barchasi</SelectItem>
-                  <SelectItem value="INTERNAL">Ichki</SelectItem>
-                  <SelectItem value="EXTERNAL">Tashqi</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterField>
-            <FilterField label="Yo'nalish">
-              <Select
+            <FilterField label={directionTypeLabel}>
+              <MultiSelectFilter
                 value={directionType}
-                onValueChange={(value) => setDirectionType((value ?? "ALL") as ControlDirection | "ALL")}
-                disabled={deploymentScope !== "ALL" && deploymentScope !== "INTERNAL"}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Barchasi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Barchasi</SelectItem>
-                  <SelectItem value="ENTRY">Kirish</SelectItem>
-                  <SelectItem value="EXIT">Chiqish</SelectItem>
-                </SelectContent>
-              </Select>
+                onChange={(nextValue) => setDirectionType(nextValue as Array<ControlDirection | typeof ALL_FILTER_VALUE>)}
+                options={directionTypeOptions}
+                allLabel={allLabel}
+                disabled={!isAllFilterSelected(deploymentScope) && !deploymentScope.includes("INTERNAL")}
+              />
             </FilterField>
-            <FilterField label="Tizim nomi">
-              <Select
+            <FilterField label={systemNameLabel}>
+              <MultiSelectFilter
                 value={systemName}
-                onValueChange={(value) => setSystemName((value ?? "ALL") as ControlSystem | "ALL")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Barchasi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Barchasi</SelectItem>
-                  {availableSystems.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(nextValue) => setSystemName(nextValue as Array<ControlSystem | typeof ALL_FILTER_VALUE>)}
+                options={[
+                  { value: ALL_FILTER_VALUE, label: allLabel },
+                  ...availableSystems.map((option) => ({ value: option, label: option })),
+                ]}
+                allLabel={allLabel}
+              />
             </FilterField>
-            <FilterField label="Mantiqiy nazorat turi">
-              <Select
+            <FilterField label={controlTypeLabel}>
+              <MultiSelectFilter
                 value={controlType}
-                onValueChange={(value) => setControlType((value ?? "ALL") as ControlType | "ALL")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Barchasi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Barchasi</SelectItem>
-                  <SelectItem value="BLOCK">Taqiqlash</SelectItem>
-                  <SelectItem value="WARNING">Ogohlantirish</SelectItem>
-                  <SelectItem value="ALLOW">Istisno</SelectItem>
-                </SelectContent>
-              </Select>
+                onChange={(nextValue) => setControlType(nextValue as Array<ControlType | typeof ALL_FILTER_VALUE>)}
+                options={controlTypeOptions}
+                allLabel={allLabel}
+              />
             </FilterField>
-            <FilterField label="Mantiqiy nazorat bosqichi">
-              <Select value={processStage} onValueChange={(value) => setProcessStage(value ?? "ALL")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Barchasi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Barchasi</SelectItem>
-                  {availableProcessStages.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <FilterField label={processStageLabel}>
+              <MultiSelectFilter
+                value={processStage}
+                onChange={setProcessStage}
+                options={[
+                  { value: ALL_FILTER_VALUE, label: allLabel },
+                  ...availableProcessStages.map((option) => ({ value: option, label: option })),
+                ]}
+                allLabel={allLabel}
+              />
             </FilterField>
-          </div>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-muted-foreground">{rows.length} ta mantiqiy nazorat topildi</p>
-            <Button type="button" variant="outline" onClick={resetFilters}>
-              Filtrlarni tozalash
-            </Button>
           </div>
         </div>
       </PageHeader>
 
       <Card className="border-border/70 bg-card/90">
+        <CardHeader className="flex flex-col gap-4 border-b border-border/70 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <Select value={pageSize} onValueChange={(value) => setPageSize(value ?? "10")}>
+              <SelectTrigger className="h-10 w-[92px]">
+                <SelectValue>{pageSize}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {["10", "20", "50", "100"].map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex min-w-[280px] flex-1 flex-wrap items-center justify-start gap-3 sm:min-w-[420px] sm:justify-end">
+            <div className="w-full sm:max-w-[320px]">
+                <Input
+                  className="w-full"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={searchPlaceholder}
+                />
+            </div>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mantiqiy nazorat</TableHead>
-                <TableHead>Tizim</TableHead>
-                <TableHead>Amal qilish muddati</TableHead>
-                <TableHead>Turi va bosqichi</TableHead>
-                <TableHead>{t("common.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {controlsQuery.isLoading ? (
+          <div className="max-h-[640px] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_var(--border)]">
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                    {t("common.loading")}
-                  </TableCell>
+                  <TableHead>Mantiqiy nazorat</TableHead>
+                  <TableHead>Tizim</TableHead>
+                  <TableHead>Amal qilish muddati</TableHead>
+                  <TableHead>Turi va bosqichi</TableHead>
+                  <TableHead>{t("common.actions")}</TableHead>
                 </TableRow>
-              ) : null}
-              {controlsQuery.isError ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-sm text-destructive">
-                    Ma'lumotlarni yuklab bo'lmadi
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {!controlsQuery.isLoading && !controlsQuery.isError && rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                    {t("common.noData")}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {rows.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="align-top">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-mono text-sm font-bold tracking-normal text-primary sm:text-base">
-                          {item.uniqueNumber || item.code}
-                        </p>
-                        {isConfidential(item.confidentialityLevel) ? (
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700"
-                            title="Maxfiy mantiqiy nazorat"
+              </TableHeader>
+              <TableBody>
+                {controlsQuery.isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                      {t("common.loading")}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {controlsQuery.isError ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10 text-center text-sm text-destructive">
+                      Ma'lumotlarni yuklab bo'lmadi
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {!controlsQuery.isLoading && !controlsQuery.isError && rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                      {t("common.noData")}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {paginatedRows.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="align-top">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/controls/${item.id}/edit`)}
+                            className="cursor-pointer font-mono text-sm font-extrabold tracking-normal text-primary transition-colors hover:text-primary/80 hover:underline sm:text-base"
                           >
-                            <Shield className="size-3.5" />
-                            Maxfiy
-                          </span>
-                        ) : null}
+                            {item.uniqueNumber || item.code}
+                          </button>
+                          {isConfidential(item.confidentialityLevel) ? (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700"
+                              title="Maxfiy mantiqiy nazorat"
+                            >
+                              <Shield className="size-3.5" />
+                              Maxfiy
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="font-semibold text-foreground">{item.name}</p>
                       </div>
-                      <p className="font-semibold text-foreground">{item.name}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <div className="space-y-2">
-                      <SystemBadge system={item.systemName} />
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="secondary">{scopeLabels[item.deploymentScope]}</Badge>
-                        {item.directionType ? <Badge variant="outline">{directionLabels[item.directionType]}</Badge> : null}
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="space-y-2">
+                        <SystemBadge system={item.systemName} />
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="secondary">{scopeLabels[item.deploymentScope]}</Badge>
+                          {item.directionType ? <Badge variant="outline">{directionLabels[item.directionType]}</Badge> : null}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <div className="space-y-1">
+                    </TableCell>
+                    <TableCell className="align-top">
                       <p className="font-medium text-foreground">{formatDateRange(item.startDate, item.finishDate)}</p>
-                      <p className="text-xs text-muted-foreground">Boshlanish va yakunlanish sanalari</p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <div className="space-y-2">
-                      <TypeBadge type={item.controlType} />
-                      <p className="text-sm text-muted-foreground">{item.processStage}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/controls/${item.id}/edit`)}>
-                        <PencilLine className="size-4" />
-                        {t("common.edit")}
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/controls/${item.id}/builder`)}>
-                        <Route className="size-4" />
-                        Builder
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => duplicateMutation.mutate(item.id)}
-                        disabled={duplicateMutation.isPending}
-                      >
-                        <Copy className="size-4" />
-                        {t("common.duplicate")}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="space-y-2">
+                        <TypeBadge type={item.controlType} />
+                        <p className="text-sm text-muted-foreground">{item.processStage}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/controls/${item.id}/edit`)}>
+                          <PencilLine className="size-4" />
+                          {t("common.edit")}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/controls/${item.id}/builder`)}>
+                          <Route className="size-4" />
+                          Builder
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openDuplicateDialog(item.id, item.uniqueNumber || item.code)}
+                          disabled={duplicateMutation.isPending}
+                        >
+                          <Copy className="size-4" />
+                          {t("common.duplicate")}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {totalRows === 0
+                ? "0 / 0 ko'rsatilmoqda"
+                : `${pageStartIndex + 1}-${pageEndIndex} / ${totalRows} ko'rsatilmoqda`}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={safeCurrentPage === 1}
+              >
+                <ChevronLeft className="size-4" />
+                Oldingi
+              </Button>
+              <div className="flex flex-wrap items-center gap-1">
+                {paginationItems.map((item, index) =>
+                  item === "ellipsis" ? (
+                    <span
+                      key={`ellipsis-${index}`}
+                      className="inline-flex h-9 min-w-9 items-center justify-center px-1 text-sm text-muted-foreground"
+                    >
+                      ...
+                    </span>
+                  ) : (
+                    <Button
+                      key={item}
+                      type="button"
+                      variant={item === safeCurrentPage ? "default" : "outline"}
+                      size="sm"
+                      className="min-w-9 px-3"
+                      onClick={() => setCurrentPage(item)}
+                    >
+                      {item}
+                    </Button>
+                  ),
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={safeCurrentPage === totalPages}
+              >
+                Keyingi
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {pendingDuplicateControl ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/28 p-4 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !duplicateMutation.isPending) {
+              setPendingDuplicateControl(null);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-[28px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,249,255,0.92))] p-6 shadow-[0_28px_70px_-30px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(26,33,46,0.96),rgba(20,26,37,0.92))]">
+            <div className="flex size-12 items-center justify-center rounded-[18px] bg-amber-500/10 text-amber-600 dark:bg-amber-500/14 dark:text-amber-300">
+              <AlertTriangle className="size-5" />
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <h3 className="text-xl font-semibold text-foreground">
+                {t("controls.duplicate.title", { defaultValue: "Nusxalashni tasdiqlaysizmi?" })}
+              </h3>
+              <p className="text-sm leading-6 text-muted-foreground">
+                <span className="font-extrabold text-foreground">{pendingDuplicateControl.code}</span>{" "}
+                {t("controls.duplicate.messageSuffix", {
+                  defaultValue: "raqamli ushbu Mantiqiy nazoratni nusxalashni tasdiqlaysizmi?",
+                })}
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPendingDuplicateControl(null)}
+                disabled={duplicateMutation.isPending}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                onClick={confirmDuplicate}
+                disabled={duplicateMutation.isPending}
+                className="bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-400"
+              >
+                {duplicateMutation.isPending
+                  ? t("common.loading")
+                  : t("controls.duplicate.confirm", { defaultValue: "Tasdiqlash" })}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
