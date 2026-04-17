@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Server,
   Trash2,
   X,
 } from "lucide-react";
@@ -39,44 +40,57 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createClassifierDepartment,
   createClassifierProcessStage,
+  createClassifierServer,
   createClassifierSystemType,
   deleteClassifierDepartment,
   deleteClassifierProcessStage,
+  deleteClassifierServer,
   deleteClassifierSystemType,
+  deleteClassifierTable,
   updateClassifierDepartment,
   updateClassifierProcessStage,
+  updateClassifierServer,
   updateClassifierSystemType,
+  updateClassifierTable,
 } from "@/lib/api";
 import {
   classifierQueryKeys,
   getClassifierDepartments,
   getClassifierProcessStages,
+  getClassifierServers,
   getClassifierSystemTypes,
   getClassifierTables,
   sortClassifierDepartments,
   sortClassifierProcessStages,
+  sortClassifierServers,
   sortClassifierSystemTypes,
+  sortClassifierTables,
 } from "@/lib/classifiers";
 import type {
   ClassifierDepartment,
   ClassifierDepartmentRequest,
   ClassifierProcessStage,
   ClassifierProcessStageRequest,
+  ClassifierServer,
+  ClassifierServerRequest,
   ClassifierSystemType,
   ClassifierSystemTypeRequest,
   ClassifierTable,
+  ClassifierTableColumn,
+  ClassifierTableRequest,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type TabValue = "departments" | "stages" | "systemTypes" | "tables";
+type TabValue = "departments" | "stages" | "systemTypes" | "tables" | "servers";
 type DepartmentTypeFilter = "all" | (typeof departmentTypeOptions)[number];
 type SystemTypeScopeFilter = "all" | "Ichki" | "Tashqi";
 type TableSystemFilterValue = string;
 type EditorState =
   | { kind: "department"; mode: "create" | "edit"; id?: string }
   | { kind: "stage"; mode: "create" | "edit"; id?: string }
-  | { kind: "systemType"; mode: "create" | "edit"; id?: string };
-type DeleteState = { kind: "department" | "stage" | "systemType"; id: string; label: string };
+  | { kind: "systemType"; mode: "create" | "edit"; id?: string }
+  | { kind: "server"; mode: "create" | "edit"; id?: string };
+type DeleteState = { kind: "department" | "stage" | "systemType" | "server" | "table"; id: string; label: string };
 
 const departmentTypeOptions = ["Boshqarma", "Bo'lim", "Sektor", "Laboratoriya"] as const;
 const systemScopeOptions = ["Ichki", "Tashqi"] as const;
@@ -103,6 +117,21 @@ function createEmptySystemTypeForm(): ClassifierSystemTypeRequest {
     systemName: "",
     scopeType: "Ichki",
     active: true,
+  };
+}
+
+function createEmptyServerForm(): ClassifierServerRequest {
+  return {
+    name: "",
+    description: "",
+    active: true,
+  };
+}
+
+function cloneClassifierTable(table: ClassifierTable): ClassifierTable {
+  return {
+    ...table,
+    columns: table.columns.map((column) => ({ ...column })),
   };
 }
 
@@ -293,27 +322,6 @@ function normalizeMultiValueSelection<T extends string>(
 
 function isAllFilterSelected(values: string[]) {
   return values.includes(ALL_FILTER_VALUE);
-}
-
-function getNullableBadge(columnNullable: boolean | null) {
-  if (columnNullable === true) {
-    return {
-      label: "Ha",
-      variant: "secondary" as const,
-    };
-  }
-
-  if (columnNullable === false) {
-    return {
-      label: "Yo'q",
-      variant: "outline" as const,
-    };
-  }
-
-  return {
-    label: "Noma'lum",
-    variant: "outline" as const,
-  };
 }
 
 function AutocompleteMultiSelectFilter({
@@ -520,15 +528,18 @@ export function ClassifiersPage() {
   const [systemTypeQuery, setSystemTypeQuery] = useState("");
   const [systemTypeScopeFilter, setSystemTypeScopeFilter] = useState<SystemTypeScopeFilter>("all");
   const [tableQuery, setTableQuery] = useState("");
+  const [serverQuery, setServerQuery] = useState("");
   const [tableSystemTypeFilter, setTableSystemTypeFilter] = useState<TableSystemFilterValue[]>([ALL_FILTER_VALUE]);
   const [selectedTable, setSelectedTable] = useState<ClassifierTable | null>(null);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isTableSubmitting, setIsTableSubmitting] = useState(false);
   const [departmentForm, setDepartmentForm] = useState<ClassifierDepartmentRequest>(createEmptyDepartmentForm);
   const [stageForm, setStageForm] = useState<ClassifierProcessStageRequest>(createEmptyStageForm);
   const [systemTypeForm, setSystemTypeForm] = useState<ClassifierSystemTypeRequest>(createEmptySystemTypeForm);
+  const [serverForm, setServerForm] = useState<ClassifierServerRequest>(createEmptyServerForm);
   const queryClient = useQueryClient();
 
   const departmentsQuery = useQuery({
@@ -546,6 +557,12 @@ export function ClassifiersPage() {
   const systemTypesQuery = useQuery({
     queryKey: classifierQueryKeys.systemTypes,
     queryFn: getClassifierSystemTypes,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
+  const serversQuery = useQuery({
+    queryKey: classifierQueryKeys.servers,
+    queryFn: getClassifierServers,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 1000 * 60 * 60,
   });
@@ -575,6 +592,12 @@ export function ClassifiersPage() {
   }, [systemTypesQuery.error]);
 
   useEffect(() => {
+    if (serversQuery.error) {
+      toast.error(extractErrorMessage(serversQuery.error, "Serverlarni yuklab bo'lmadi."));
+    }
+  }, [serversQuery.error]);
+
+  useEffect(() => {
     if (tablesQuery.error) {
       toast.error(extractErrorMessage(tablesQuery.error, "Jadvallarni yuklab bo'lmadi."));
     }
@@ -583,6 +606,7 @@ export function ClassifiersPage() {
   const departments = departmentsQuery.data ?? [];
   const stages = stagesQuery.data ?? [];
   const systemTypes = systemTypesQuery.data ?? [];
+  const servers = serversQuery.data ?? [];
   const tables = tablesQuery.data ?? [];
   const tableSystemTypeOptions = useMemo(
     () => [
@@ -593,6 +617,21 @@ export function ClassifiersPage() {
     ],
     [tables],
   );
+  const editableTableSystemTypeOptions = useMemo(() => {
+    const baseOptions = [
+      ...new Set(
+        systemTypes
+          .map((item) => item.systemName)
+          .filter((value) => value.trim().length > 0),
+      ),
+    ].sort((left, right) => left.localeCompare(right, "uz"));
+
+    if (selectedTable?.systemType && !baseOptions.includes(selectedTable.systemType)) {
+      return [selectedTable.systemType, ...baseOptions];
+    }
+
+    return baseOptions;
+  }, [selectedTable?.systemType, systemTypes]);
 
   const filteredDepartments = useMemo(() => {
     const query = departmentQuery.trim().toLocaleLowerCase();
@@ -642,6 +681,19 @@ export function ClassifiersPage() {
     );
   }, [tableQuery, tableSystemTypeFilter, tables]);
 
+  const filteredServers = useMemo(() => {
+    const query = serverQuery.trim().toLocaleLowerCase();
+    if (!query) {
+      return servers;
+    }
+
+    return servers.filter((row) =>
+      `${row.name} ${row.description ?? ""} ${row.active ? "faol" : "nofaol"}`
+        .toLocaleLowerCase()
+        .includes(query),
+    );
+  }, [serverQuery, servers]);
+
   useEffect(() => {
     if (isAllFilterSelected(tableSystemTypeFilter)) {
       return;
@@ -676,6 +728,12 @@ export function ClassifiersPage() {
       return;
     }
 
+    if (activeTab === "servers") {
+      setServerForm(createEmptyServerForm());
+      setEditorState({ kind: "server", mode: "create" });
+      return;
+    }
+
     setSystemTypeForm(createEmptySystemTypeForm());
     setEditorState({ kind: "systemType", mode: "create" });
   }
@@ -705,6 +763,76 @@ export function ClassifiersPage() {
       active: item.active,
     });
     setEditorState({ kind: "systemType", mode: "edit", id: item.id });
+  }
+
+  function openServerEditor(item: ClassifierServer) {
+    setServerForm({
+      name: item.name,
+      description: item.description ?? "",
+      active: item.active,
+    });
+    setEditorState({ kind: "server", mode: "edit", id: item.id });
+  }
+
+  function openTableEditor(item: ClassifierTable) {
+    setSelectedTable(cloneClassifierTable(item));
+  }
+
+  function updateSelectedTableColumn(
+    columnId: string | null,
+    updater: (column: ClassifierTableColumn) => ClassifierTableColumn,
+  ) {
+    if (!columnId) {
+      return;
+    }
+
+    setSelectedTable((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        columns: current.columns.map((column) => (column.id === columnId ? updater(column) : column)),
+      };
+    });
+  }
+
+  async function handleSelectedTableSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedTable?.id) {
+      return;
+    }
+
+    setIsTableSubmitting(true);
+
+    try {
+      const payload = {
+        tableName: selectedTable.tableName.trim(),
+        description: selectedTable.description.trim(),
+        systemType: selectedTable.systemType.trim(),
+        columns: selectedTable.columns.map((column) => ({
+          id: column.id!,
+          name: column.name.trim(),
+          dataType: column.dataType.trim(),
+          description: (column.description ?? "").trim(),
+          nullable: column.nullable,
+          ordinalPosition: column.ordinalPosition,
+        })),
+      } satisfies ClassifierTableRequest;
+
+      const saved = await updateClassifierTable(selectedTable.id, payload);
+      queryClient.setQueryData<ClassifierTable[]>(classifierQueryKeys.tables, (current = []) =>
+        sortClassifierTables([...current.filter((item) => item.id !== saved.id), saved]),
+      );
+      setSelectedTable(cloneClassifierTable(saved));
+      toast.success("Jadval muvaffaqiyatli yangilandi.");
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Jadval saqlanmadi."));
+    } finally {
+      setIsTableSubmitting(false);
+    }
   }
 
   async function handleEditorSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -757,7 +885,7 @@ export function ClassifiersPage() {
             ? "Bosqich muvaffaqiyatli qo'shildi."
             : "Bosqich muvaffaqiyatli yangilandi.",
         );
-      } else {
+      } else if (editorState.kind === "systemType") {
         const payload = {
           systemName: systemTypeForm.systemName.trim(),
           scopeType: systemTypeForm.scopeType,
@@ -777,6 +905,26 @@ export function ClassifiersPage() {
             ? "Tizim turi muvaffaqiyatli qo'shildi."
             : "Tizim turi muvaffaqiyatli yangilandi.",
         );
+      } else {
+        const payload = {
+          name: serverForm.name.trim(),
+          description: serverForm.description.trim(),
+          active: serverForm.active,
+        } satisfies ClassifierServerRequest;
+
+        const saved = editorState.mode === "create"
+          ? await createClassifierServer(payload)
+          : await updateClassifierServer(editorState.id!, payload);
+
+        queryClient.setQueryData<ClassifierServer[]>(classifierQueryKeys.servers, (current = []) =>
+          sortClassifierServers([...current.filter((item) => item.id !== saved.id), saved]),
+        );
+
+        toast.success(
+          editorState.mode === "create"
+            ? "Server muvaffaqiyatli qo'shildi."
+            : "Server muvaffaqiyatli yangilandi.",
+        );
       }
 
       setEditorState(null);
@@ -788,7 +936,9 @@ export function ClassifiersPage() {
             ? "Boshqarma saqlanmadi."
             : editorState.kind === "stage"
               ? "Bosqich saqlanmadi."
-              : "Tizim turi saqlanmadi.",
+              : editorState.kind === "systemType"
+                ? "Tizim turi saqlanmadi."
+                : "Server saqlanmadi.",
         ),
       );
     } finally {
@@ -816,12 +966,25 @@ export function ClassifiersPage() {
           current.filter((item) => item.id !== deleteState.id),
         );
         toast.success("Bosqich o'chirildi.");
-      } else {
+      } else if (deleteState.kind === "systemType") {
         await deleteClassifierSystemType(deleteState.id);
         queryClient.setQueryData<ClassifierSystemType[]>(classifierQueryKeys.systemTypes, (current = []) =>
           current.filter((item) => item.id !== deleteState.id),
         );
         toast.success("Tizim turi o'chirildi.");
+      } else if (deleteState.kind === "table") {
+        await deleteClassifierTable(deleteState.id);
+        queryClient.setQueryData<ClassifierTable[]>(classifierQueryKeys.tables, (current = []) =>
+          current.filter((item) => item.id !== deleteState.id),
+        );
+        setSelectedTable((current) => (current?.id === deleteState.id ? null : current));
+        toast.success("Jadval o'chirildi.");
+      } else {
+        await deleteClassifierServer(deleteState.id);
+        queryClient.setQueryData<ClassifierServer[]>(classifierQueryKeys.servers, (current = []) =>
+          current.filter((item) => item.id !== deleteState.id),
+        );
+        toast.success("Server o'chirildi.");
       }
 
       setDeleteState(null);
@@ -833,7 +996,11 @@ export function ClassifiersPage() {
             ? "Boshqarma o'chirilmadi."
             : deleteState.kind === "stage"
               ? "Bosqich o'chirilmadi."
-              : "Tizim turi o'chirilmadi.",
+              : deleteState.kind === "systemType"
+                ? "Tizim turi o'chirilmadi."
+                : deleteState.kind === "table"
+                  ? "Jadval o'chirilmadi."
+                  : "Server o'chirilmadi.",
         ),
       );
     } finally {
@@ -869,6 +1036,12 @@ export function ClassifiersPage() {
               className="h-10 min-w-[11rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
             >
               Jadvallar
+            </TabsTrigger>
+            <TabsTrigger
+              value="servers"
+              className="h-10 min-w-[11rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
+            >
+              Serverlar
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1152,12 +1325,13 @@ export function ClassifiersPage() {
                         <TableHead className="min-w-[26rem]">Jadval tavsifi</TableHead>
                         <TableHead className="min-w-[14rem]">Tizim turi</TableHead>
                         <TableHead className="min-w-[8rem]">Ustunlar</TableHead>
+                        <TableHead className="w-32 px-5 text-right">Amallar</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {tablesQuery.isLoading ? (
                         <TableRow className="bg-transparent hover:bg-transparent">
-                          <TableCell colSpan={5} className="h-[20rem] px-5">
+                          <TableCell colSpan={6} className="h-[20rem] px-5">
                             <div className="flex items-center justify-center gap-3 text-muted-foreground">
                               <Loader2 className="size-4 animate-spin" />
                               <span>Ma'lumotlar yuklanmoqda...</span>
@@ -1166,7 +1340,7 @@ export function ClassifiersPage() {
                         </TableRow>
                       ) : filteredTables.length === 0 ? (
                         <TableRow className="bg-transparent hover:bg-transparent">
-                          <TableCell colSpan={5} className="px-0 py-0">
+                          <TableCell colSpan={6} className="px-0 py-0">
                             <EmptyState
                               title="Jadvallar topilmadi"
                               description="Qidiruvni o'zgartirib ko'ring yoki metadata manbasini tekshiring."
@@ -1180,7 +1354,7 @@ export function ClassifiersPage() {
                             <TableCell className="py-4 whitespace-normal">
                               <button
                                 type="button"
-                                onClick={() => setSelectedTable(row)}
+                                onClick={() => openTableEditor(row)}
                                 className="cursor-pointer text-left text-sm font-semibold text-primary transition hover:underline"
                               >
                                 {row.tableName}
@@ -1198,6 +1372,104 @@ export function ClassifiersPage() {
                               <Badge variant="outline" className="h-7 rounded-full px-3">
                                 {row.columns.length} ta
                               </Badge>
+                            </TableCell>
+                            <TableCell className="px-5">
+                              {row.id ? (
+                                <ActionButtons
+                                  label={row.tableName}
+                                  onEdit={() => openTableEditor(row)}
+                                  onDelete={() =>
+                                    setDeleteState({
+                                      kind: "table",
+                                      id: row.id!,
+                                      label: row.tableName,
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <p className="text-right text-xs text-muted-foreground">Faqat ko'rish</p>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="servers">
+          <Card className="border-border/70 bg-card/90 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.2)]">
+            <CardContent className="space-y-5 p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <SectionHeader
+                  icon={Server}
+                  title={`Serverlar (${filteredServers.length} ta)`}
+                />
+                <SearchBox value={serverQuery} onChange={setServerQuery} />
+              </div>
+
+              <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/70">
+                <ScrollArea className="h-[34rem]">
+                  <Table>
+                    <TableHeader className="bg-muted/40">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-16 px-5">No</TableHead>
+                        <TableHead className="min-w-[16rem]">Server nomi</TableHead>
+                        <TableHead className="min-w-[24rem]">Ta'rif</TableHead>
+                        <TableHead className="min-w-[8rem]">Holat</TableHead>
+                        <TableHead className="w-32 px-5 text-right">Amallar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {serversQuery.isLoading ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={5} className="h-[20rem] px-5">
+                            <div className="flex items-center justify-center gap-3 text-muted-foreground">
+                              <Loader2 className="size-4 animate-spin" />
+                              <span>Ma'lumotlar yuklanmoqda...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredServers.length === 0 ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={5} className="px-0 py-0">
+                            <EmptyState
+                              title="Serverlar topilmadi"
+                              description="Qidiruvni o'zgartirib ko'ring yoki yangi server qo'shing."
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredServers.map((row, index) => (
+                          <TableRow key={row.id} className="bg-transparent">
+                            <TableCell className="px-5 font-semibold text-muted-foreground">{index + 1}</TableCell>
+                            <TableCell className="py-4 whitespace-normal">
+                              <p className="text-sm font-medium text-foreground">{row.name}</p>
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              <p className="max-w-[42rem] text-sm leading-6 text-muted-foreground">
+                                {row.description || "Ta'rif kiritilmagan"}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <StatusChip active={row.active} />
+                            </TableCell>
+                            <TableCell className="px-5">
+                              <ActionButtons
+                                label={row.name}
+                                onEdit={() => openServerEditor(row)}
+                                onDelete={() =>
+                                  setDeleteState({
+                                    kind: "server",
+                                    id: row.id,
+                                    label: row.name,
+                                  })
+                                }
+                              />
                             </TableCell>
                           </TableRow>
                         ))
@@ -1222,7 +1494,9 @@ export function ClassifiersPage() {
               ? "Yangi boshqarma qo'shish"
               : activeTab === "stages"
                 ? "Yangi bosqich qo'shish"
-                : "Yangi tizim turi qo'shish"
+                : activeTab === "systemTypes"
+                  ? "Yangi tizim turi qo'shish"
+                  : "Yangi server qo'shish"
           }
         >
           <Plus className="size-7" />
@@ -1232,30 +1506,89 @@ export function ClassifiersPage() {
       {selectedTable ? (
         <ModalShell
           title={selectedTable.tableName}
-          description={`${selectedTable.systemType} tizimi uchun jadval ustunlari va tavsiflari`}
+          description="Jadval ma'lumotlari va ustunlar ro'yxatini shu oynada tahrirlang."
           onClose={() => setSelectedTable(null)}
-          contentClassName="max-w-6xl"
+          contentClassName="max-w-7xl"
         >
-          <div className="space-y-5">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-[18px] border border-border/70 bg-background/70 px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">Jadval tavsifi</p>
-                <p className="mt-2 text-sm leading-6 text-foreground">{selectedTable.description}</p>
+          <form onSubmit={handleSelectedTableSubmit} className="space-y-5">
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_0.8fr]">
+              <div className="space-y-2">
+                <Label htmlFor="table-name">Jadval nomi</Label>
+                <Input
+                  id="table-name"
+                  value={selectedTable.tableName}
+                  onChange={(event) =>
+                    setSelectedTable((current) => (current ? { ...current, tableName: event.target.value } : current))
+                  }
+                  className="h-11 rounded-[14px]"
+                  disabled={!selectedTable.id || isTableSubmitting}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="table-system-type">Tizim turi</Label>
+                {editableTableSystemTypeOptions.length > 0 ? (
+                  <Select
+                    value={selectedTable.systemType}
+                    onValueChange={(value) =>
+                      setSelectedTable((current) =>
+                        current ? { ...current, systemType: value ?? current.systemType } : current
+                      )
+                    }
+                    disabled={!selectedTable.id || isTableSubmitting}
+                  >
+                    <SelectTrigger id="table-system-type" className="h-11 w-full rounded-[14px]">
+                      <SelectValue placeholder="Tizim turini tanlang" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {editableTableSystemTypeOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="table-system-type"
+                    value={selectedTable.systemType}
+                    onChange={(event) =>
+                      setSelectedTable((current) => (current ? { ...current, systemType: event.target.value } : current))
+                    }
+                    className="h-11 rounded-[14px]"
+                    disabled={!selectedTable.id || isTableSubmitting}
+                    required
+                  />
+                )}
               </div>
               <div className="rounded-[18px] border border-border/70 bg-background/70 px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">Tizim turi</p>
-                <p className="mt-2 text-sm leading-6 text-foreground">{selectedTable.systemType}</p>
+                <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">Ustunlar soni</p>
+                <p className="mt-2 text-sm leading-6 text-foreground">{selectedTable.columns.length} ta</p>
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="table-description">Jadval tavsifi</Label>
+              <Textarea
+                id="table-description"
+                value={selectedTable.description}
+                onChange={(event) =>
+                  setSelectedTable((current) => (current ? { ...current, description: event.target.value } : current))
+                }
+                className="min-h-28 rounded-[14px]"
+                disabled={!selectedTable.id || isTableSubmitting}
+                required
+              />
+            </div>
+
             <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/70">
-              <ScrollArea className="h-[24rem]">
+              <ScrollArea className="h-[28rem]">
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-16 px-5">No</TableHead>
+                      <TableHead className="w-24 px-5">Tartib</TableHead>
                       <TableHead className="min-w-[14rem]">Ustun nomi</TableHead>
-                      <TableHead className="min-w-[10rem]">Ma'lumot turi</TableHead>
+                      <TableHead className="min-w-[12rem]">Ma'lumot turi</TableHead>
                       <TableHead className="min-w-[18rem]">Tavsif</TableHead>
                       <TableHead className="min-w-[8rem]">Null</TableHead>
                     </TableRow>
@@ -1272,40 +1605,101 @@ export function ClassifiersPage() {
                       </TableRow>
                     ) : (
                       selectedTable.columns.map((column) => (
-                        (() => {
-                          const nullableBadge = getNullableBadge(column.nullable);
-
-                          return (
-                            <TableRow key={`${selectedTable.tableName}-${column.name}`} className="bg-transparent">
-                              <TableCell className="px-5 font-semibold text-muted-foreground">{column.ordinalPosition}</TableCell>
-                              <TableCell className="py-4">
-                                <p className="text-sm font-semibold text-foreground">{column.name}</p>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="h-7 rounded-full px-3">
-                                  {column.dataType}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="whitespace-normal">
-                                <p className="max-w-[28rem] text-sm leading-6 text-muted-foreground">
-                                  {column.description || "Tavsif kiritilmagan"}
-                                </p>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={nullableBadge.variant} className="h-7 rounded-full px-3">
-                                  {nullableBadge.label}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })()
+                        <TableRow key={`${selectedTable.id ?? selectedTable.tableName}-${column.id ?? column.name}`} className="bg-transparent align-top">
+                          <TableCell className="px-5">
+                            <Input
+                              type="number"
+                              min={1}
+                              value={column.ordinalPosition}
+                              onChange={(event) =>
+                                updateSelectedTableColumn(column.id, (current) => ({
+                                  ...current,
+                                  ordinalPosition: Math.max(1, Number(event.target.value) || 1),
+                                }))
+                              }
+                              className="h-10 rounded-[12px]"
+                              disabled={!selectedTable.id || isTableSubmitting || !column.id}
+                            />
+                          </TableCell>
+                          <TableCell className="py-4">
+                            <Input
+                              value={column.name}
+                              onChange={(event) =>
+                                updateSelectedTableColumn(column.id, (current) => ({
+                                  ...current,
+                                  name: event.target.value,
+                                }))
+                              }
+                              className="h-10 rounded-[12px]"
+                              disabled={!selectedTable.id || isTableSubmitting || !column.id}
+                              required
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={column.dataType}
+                              onChange={(event) =>
+                                updateSelectedTableColumn(column.id, (current) => ({
+                                  ...current,
+                                  dataType: event.target.value,
+                                }))
+                              }
+                              className="h-10 rounded-[12px]"
+                              disabled={!selectedTable.id || isTableSubmitting || !column.id}
+                              required
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={column.description ?? ""}
+                              onChange={(event) =>
+                                updateSelectedTableColumn(column.id, (current) => ({
+                                  ...current,
+                                  description: event.target.value,
+                                }))
+                              }
+                              className="h-10 rounded-[12px]"
+                              disabled={!selectedTable.id || isTableSubmitting || !column.id}
+                              placeholder="Tavsif kiriting"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex min-h-10 items-center">
+                              <Switch
+                                checked={Boolean(column.nullable)}
+                                onCheckedChange={(checked) =>
+                                  updateSelectedTableColumn(column.id, (current) => ({
+                                    ...current,
+                                    nullable: Boolean(checked),
+                                  }))
+                                }
+                                disabled={!selectedTable.id || isTableSubmitting || !column.id}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
               </ScrollArea>
             </div>
-          </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <p className="text-sm text-muted-foreground">
+                {!selectedTable.id ? "Bu jadval faqat ko'rish rejimida." : "O'zgarishlar jadval va barcha ustunlarga birgalikda saqlanadi."}
+              </p>
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="outline" onClick={() => setSelectedTable(null)} disabled={isTableSubmitting}>
+                  Yopish
+                </Button>
+                <Button type="submit" disabled={!selectedTable.id || isTableSubmitting}>
+                  {isTableSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Saqlash
+                </Button>
+              </div>
+            </div>
+          </form>
         </ModalShell>
       ) : null}
 
@@ -1320,16 +1714,22 @@ export function ClassifiersPage() {
                 ? editorState.mode === "create"
                   ? "Yangi bosqich qo'shish"
                   : "Bosqich ma'lumotlarini tahrirlash"
-                : editorState.mode === "create"
-                  ? "Yangi tizim turi qo'shish"
-                  : "Tizim turi ma'lumotlarini tahrirlash"
+                : editorState.kind === "systemType"
+                  ? editorState.mode === "create"
+                    ? "Yangi tizim turi qo'shish"
+                    : "Tizim turi ma'lumotlarini tahrirlash"
+                  : editorState.mode === "create"
+                    ? "Yangi server qo'shish"
+                    : "Server ma'lumotlarini tahrirlash"
           }
           description={
             editorState.kind === "department"
               ? "Boshqarma nomi, turi va holatini boshqaring."
               : editorState.kind === "stage"
                 ? "Bosqich nomi, tavsifi va holatini boshqaring."
-                : "Tizim nomi va ichki yoki tashqi turini boshqaring."
+                : editorState.kind === "systemType"
+                  ? "Tizim nomi va ichki yoki tashqi turini boshqaring."
+                  : "Server nomi, ta'rifi va holatini boshqaring."
           }
           onClose={() => setEditorState(null)}
         >
@@ -1424,7 +1824,7 @@ export function ClassifiersPage() {
                   />
                 </div>
               </>
-            ) : (
+            ) : editorState.kind === "systemType" ? (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="system-type-name">Tizim nomi</Label>
@@ -1473,6 +1873,48 @@ export function ClassifiersPage() {
                     onCheckedChange={(checked) =>
                       setSystemTypeForm((current) => ({ ...current, active: Boolean(checked) }))
                     }
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="server-name">Server nomi</Label>
+                  <Input
+                    id="server-name"
+                    value={serverForm.name}
+                    onChange={(event) =>
+                      setServerForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                    placeholder="Server nomini kiriting"
+                    className="h-11 rounded-[14px]"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-[18px] border border-border/70 bg-background/70 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Faol holatda saqlash</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Nofaol serverlar tanlovlarda ishlatilmaydi.</p>
+                  </div>
+                  <Switch
+                    checked={serverForm.active}
+                    onCheckedChange={(checked) =>
+                      setServerForm((current) => ({ ...current, active: Boolean(checked) }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="server-description">Ta'rif</Label>
+                  <Textarea
+                    id="server-description"
+                    value={serverForm.description}
+                    onChange={(event) =>
+                      setServerForm((current) => ({ ...current, description: event.target.value }))
+                    }
+                    placeholder="Server haqida qisqacha ta'rif yozing"
+                    className="min-h-28 rounded-[14px]"
                   />
                 </div>
               </>

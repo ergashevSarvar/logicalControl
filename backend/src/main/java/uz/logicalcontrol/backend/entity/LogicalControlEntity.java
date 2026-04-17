@@ -63,6 +63,12 @@ public class LogicalControlEntity extends BaseEntity {
     @Column(length = 2000)
     private String objective;
 
+    @Column(length = 2000)
+    private String basis;
+
+    @Column(name = "table_name", length = 255)
+    private String tableName;
+
     @Column(length = 255)
     private String basisFileName;
 

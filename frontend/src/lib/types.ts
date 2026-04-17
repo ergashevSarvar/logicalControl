@@ -110,7 +110,23 @@ export interface ClassifierSystemTypeRequest {
   active: boolean;
 }
 
+export interface ClassifierServer {
+  id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassifierServerRequest {
+  name: string;
+  description: string;
+  active: boolean;
+}
+
 export interface ClassifierTableColumn {
+  id: string | null;
   name: string;
   dataType: string;
   description: string | null;
@@ -118,11 +134,28 @@ export interface ClassifierTableColumn {
   ordinalPosition: number;
 }
 
+export interface ClassifierTableColumnRequest {
+  id: string;
+  name: string;
+  dataType: string;
+  description: string;
+  nullable: boolean | null;
+  ordinalPosition: number;
+}
+
 export interface ClassifierTable {
+  id: string | null;
   tableName: string;
   description: string;
   systemType: string;
   columns: ClassifierTableColumn[];
+}
+
+export interface ClassifierTableRequest {
+  tableName: string;
+  description: string;
+  systemType: string;
+  columns: ClassifierTableColumnRequest[];
 }
 
 export interface ControlRule {
@@ -180,6 +213,8 @@ export interface ControlRequest {
   code: string;
   name: string;
   objective: string;
+  basis: string;
+  tableName: string;
   basisFileName: string;
   basisFileContentType: string;
   basisFileSize: number | null;
@@ -219,6 +254,8 @@ export interface ControlRequest {
 export interface ControlOverviewRequest {
   name: string;
   objective: string;
+  basis: string;
+  tableName: string;
   basisFileName: string;
   basisFileContentType: string;
   basisFileSize: number | null;
@@ -238,6 +275,40 @@ export interface ControlOverviewRequest {
 
 export interface ControlUniqueNumberResponse {
   uniqueNumber: string;
+}
+
+export type SqlQueryExecutionStatus = "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+
+export interface SqlQueryExecutionRequest {
+  sql: string;
+  serverName: string;
+}
+
+export interface SqlQueryExecutionResult {
+  columns: string[];
+  rows: Array<Array<string | null>>;
+  totalRows: number;
+  truncated: boolean;
+}
+
+export interface SqlQueryExecutionStartResponse {
+  executionId: string;
+  status: SqlQueryExecutionStatus;
+  logMessage: string;
+  stopAvailable: boolean;
+}
+
+export interface SqlQueryExecutionStatusResponse {
+  executionId: string;
+  status: SqlQueryExecutionStatus;
+  serverName: string;
+  logMessage: string;
+  errorMessage: string | null;
+  stopAvailable: boolean;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: SqlQueryExecutionResult | null;
 }
 
 export interface ControlDetail extends ControlRequest {
@@ -299,6 +370,8 @@ export function createDefaultControlRequest(): ControlRequest {
     code: "",
     name: "",
     objective: "",
+    basis: "",
+    tableName: "",
     basisFileName: "",
     basisFileContentType: "",
     basisFileSize: null,
@@ -350,6 +423,8 @@ export function controlDetailToRequest(detail: ControlDetail): ControlRequest {
     code: detail.code,
     name: detail.name,
     objective: detail.objective,
+    basis: detail.basis ?? "",
+    tableName: detail.tableName ?? "",
     basisFileName: detail.basisFileName,
     basisFileContentType: detail.basisFileContentType,
     basisFileSize: detail.basisFileSize,

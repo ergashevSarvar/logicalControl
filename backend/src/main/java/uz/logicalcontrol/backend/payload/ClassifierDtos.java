@@ -2,6 +2,7 @@ package uz.logicalcontrol.backend.payload;
 
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public final class ClassifierDtos {
@@ -62,7 +63,43 @@ public final class ClassifierDtos {
     ) {
     }
 
+    public record ServerRequest(
+        @NotBlank String name,
+        String description,
+        Boolean active
+    ) {
+    }
+
+    public record ServerItem(
+        UUID id,
+        String name,
+        String description,
+        boolean active,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+    }
+
+    public record TableColumnRequest(
+        UUID id,
+        @NotBlank String name,
+        @NotBlank String dataType,
+        String description,
+        Boolean nullable,
+        Integer ordinalPosition
+    ) {
+    }
+
+    public record TableRequest(
+        @NotBlank String tableName,
+        @NotBlank String description,
+        @NotBlank String systemType,
+        List<TableColumnRequest> columns
+    ) {
+    }
+
     public record TableColumnItem(
+        UUID id,
         String name,
         String dataType,
         String description,
@@ -72,10 +109,11 @@ public final class ClassifierDtos {
     }
 
     public record TableItem(
+        UUID id,
         String tableName,
         String description,
         String systemType,
-        java.util.List<TableColumnItem> columns
+        List<TableColumnItem> columns
     ) {
     }
 }

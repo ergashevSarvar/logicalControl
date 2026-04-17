@@ -2,6 +2,7 @@ package uz.logicalcontrol.backend.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -17,10 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.logicalcontrol.backend.config.ClassifierCacheConfiguration;
 import uz.logicalcontrol.backend.entity.ClassifierDepartmentEntity;
 import uz.logicalcontrol.backend.entity.ClassifierProcessStageEntity;
+import uz.logicalcontrol.backend.entity.ClassifierServerEntity;
 import uz.logicalcontrol.backend.entity.ClassifierSystemTypeEntity;
 import uz.logicalcontrol.backend.payload.ClassifierDtos;
 import uz.logicalcontrol.backend.repository.ClassifierDepartmentRepository;
 import uz.logicalcontrol.backend.repository.ClassifierProcessStageRepository;
+import uz.logicalcontrol.backend.repository.ClassifierServerRepository;
 import uz.logicalcontrol.backend.repository.ClassifierSystemTypeRepository;
 
 @Service
@@ -38,6 +41,7 @@ public class ClassifierService {
 
     private final ClassifierDepartmentRepository classifierDepartmentRepository;
     private final ClassifierProcessStageRepository classifierProcessStageRepository;
+    private final ClassifierServerRepository classifierServerRepository;
     private final ClassifierSystemTypeRepository classifierSystemTypeRepository;
     private final JdbcTemplate jdbcTemplate;
 
@@ -212,7 +216,54 @@ public class ClassifierService {
         classifierSystemTypeRepository.delete(entity);
     }
 
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = ClassifierCacheConfiguration.SERVERS_CACHE, sync = true)
+    public List<ClassifierDtos.ServerItem> listServers() {
+        return classifierServerRepository.findAllByOrderByNameAsc().stream()
+            .map(this::toServerItem)
+            .toList();
+    }
+
     @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.SERVERS_CACHE, allEntries = true)
+    public ClassifierDtos.ServerItem createServer(ClassifierDtos.ServerRequest request) {
+        validateServer(request.name(), null);
+
+        var entity = ClassifierServerEntity.builder()
+            .name(request.name().trim())
+            .description(trimToNull(request.description()))
+            .active(Boolean.TRUE.equals(request.active()))
+            .build();
+
+        return toServerItem(classifierServerRepository.save(entity));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.SERVERS_CACHE, allEntries = true)
+    public ClassifierDtos.ServerItem updateServer(UUID id, ClassifierDtos.ServerRequest request) {
+        validateServer(request.name(), id);
+
+        var entity = classifierServerRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Server topilmadi: " + id));
+
+        entity.setName(request.name().trim());
+        entity.setDescription(trimToNull(request.description()));
+        entity.setActive(Boolean.TRUE.equals(request.active()));
+
+        return toServerItem(classifierServerRepository.save(entity));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.SERVERS_CACHE, allEntries = true)
+    public void deleteServer(UUID id) {
+        var entity = classifierServerRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Server topilmadi: " + id));
+
+        classifierServerRepository.delete(entity);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = ClassifierCacheConfiguration.TABLES_CACHE, sync = true)
     public List<ClassifierDtos.TableItem> listTables() {
         try {
             ensureClassifierTableMetadataImported();
@@ -227,12 +278,86 @@ public class ClassifierService {
 
         return FALLBACK_TABLE_DEFINITIONS.stream()
             .map(definition -> new ClassifierDtos.TableItem(
+                null,
                 definition.tableName(),
                 definition.description(),
                 definition.systemType(),
                 loadLiveTableColumns(definition.tableName())
             ))
             .toList();
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.TABLES_CACHE, allEntries = true)
+    public ClassifierDtos.TableItem updateTable(UUID id, ClassifierDtos.TableRequest request) {
+        validateTableRequest(request, id);
+
+        var updated = jdbcTemplate.update(
+            """
+                update classifier_tables
+                set table_name = ?,
+                    description = ?,
+                    system_type = ?,
+                    updated_at = now()
+                where id = ?
+                """,
+            request.tableName().trim(),
+            request.description().trim(),
+            request.systemType().trim(),
+            id
+        );
+        if (updated == 0) {
+            throw new EntityNotFoundException("Jadval topilmadi: " + id);
+        }
+
+        var existingColumnIds = new HashSet<>(jdbcTemplate.query(
+            """
+                select id
+                from classifier_table_columns
+                where classifier_table_id = ?
+                """,
+            (resultSet, rowNumber) -> UUID.fromString(resultSet.getString("id")),
+            id
+        ));
+
+        var columns = request.columns() == null ? List.<ClassifierDtos.TableColumnRequest>of() : request.columns();
+        for (var column : columns) {
+            if (!existingColumnIds.contains(column.id())) {
+                throw new EntityNotFoundException("Ustun topilmadi: " + column.id());
+            }
+
+            jdbcTemplate.update(
+                """
+                    update classifier_table_columns
+                    set column_name = ?,
+                        data_type = ?,
+                        column_description = ?,
+                        nullable = ?,
+                        ordinal_position = ?,
+                        updated_at = now()
+                    where id = ?
+                      and classifier_table_id = ?
+                    """,
+                column.name().trim(),
+                column.dataType().trim(),
+                trimToNull(column.description()),
+                column.nullable(),
+                column.ordinalPosition(),
+                column.id(),
+                id
+            );
+        }
+
+        return loadStoredTableById(id);
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.TABLES_CACHE, allEntries = true)
+    public void deleteTable(UUID id) {
+        var deleted = jdbcTemplate.update("delete from classifier_tables where id = ?", id);
+        if (deleted == 0) {
+            throw new EntityNotFoundException("Jadval topilmadi: " + id);
+        }
     }
 
     private void validateDepartment(String name, String departmentType, UUID id) {
@@ -288,6 +413,77 @@ public class ClassifierService {
         }
     }
 
+    private void validateServer(String name, UUID id) {
+        var normalizedName = name == null ? "" : name.trim();
+
+        if (normalizedName.isBlank()) {
+            throw new IllegalArgumentException("Server nomi majburiy");
+        }
+
+        var duplicateName = id == null
+            ? classifierServerRepository.existsByNameIgnoreCase(normalizedName)
+            : classifierServerRepository.existsByNameIgnoreCaseAndIdNot(normalizedName, id);
+        if (duplicateName) {
+            throw new IllegalArgumentException("Bu server allaqachon mavjud");
+        }
+    }
+
+    private void validateTableRequest(ClassifierDtos.TableRequest request, UUID id) {
+        var normalizedTableName = request.tableName() == null ? "" : request.tableName().trim();
+        var normalizedDescription = request.description() == null ? "" : request.description().trim();
+        var normalizedSystemType = request.systemType() == null ? "" : request.systemType().trim();
+
+        if (normalizedTableName.isBlank()) {
+            throw new IllegalArgumentException("Jadval nomi majburiy");
+        }
+        if (normalizedDescription.isBlank()) {
+            throw new IllegalArgumentException("Jadval tavsifi majburiy");
+        }
+        if (normalizedSystemType.isBlank()) {
+            throw new IllegalArgumentException("Tizim turi majburiy");
+        }
+
+        var duplicateTableName = jdbcTemplate.queryForObject(
+            """
+                select exists (
+                    select 1
+                    from classifier_tables
+                    where lower(table_name) = lower(?)
+                      and id <> ?
+                )
+                """,
+            Boolean.class,
+            normalizedTableName,
+            id
+        );
+        if (Boolean.TRUE.equals(duplicateTableName)) {
+            throw new IllegalArgumentException("Bu jadval nomi allaqachon mavjud");
+        }
+
+        var columns = request.columns() == null ? List.<ClassifierDtos.TableColumnRequest>of() : request.columns();
+        var seenColumnNames = new HashSet<String>();
+        for (var column : columns) {
+            if (column.id() == null) {
+                throw new IllegalArgumentException("Ustun identifikatori majburiy");
+            }
+
+            var normalizedColumnName = column.name() == null ? "" : column.name().trim();
+            var normalizedDataType = column.dataType() == null ? "" : column.dataType().trim();
+            if (normalizedColumnName.isBlank()) {
+                throw new IllegalArgumentException("Ustun nomi majburiy");
+            }
+            if (normalizedDataType.isBlank()) {
+                throw new IllegalArgumentException("Ustun turi majburiy");
+            }
+            if (column.ordinalPosition() == null || column.ordinalPosition() < 1) {
+                throw new IllegalArgumentException("Ustun tartib raqami noto'g'ri");
+            }
+            if (!seenColumnNames.add(normalizedColumnName.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("Bir xil ustun nomi takrorlangan: " + normalizedColumnName);
+            }
+        }
+    }
+
     private String trimToNull(String value) {
         if (value == null) {
             return null;
@@ -331,6 +527,59 @@ public class ClassifierService {
         );
     }
 
+    private ClassifierDtos.ServerItem toServerItem(ClassifierServerEntity entity) {
+        return new ClassifierDtos.ServerItem(
+            entity.getId(),
+            entity.getName(),
+            entity.getDescription(),
+            entity.isActive(),
+            entity.getCreatedAt(),
+            entity.getUpdatedAt()
+        );
+    }
+
+    private ClassifierDtos.TableItem loadStoredTableById(UUID tableId) {
+        var rows = jdbcTemplate.query(
+            """
+                select
+                    t.id as table_id,
+                    t.table_name,
+                    t.description,
+                    t.system_type,
+                    c.id as column_id,
+                    c.column_name,
+                    c.data_type,
+                    c.column_description,
+                    c.nullable,
+                    c.ordinal_position
+                from classifier_tables t
+                left join classifier_table_columns c
+                    on c.classifier_table_id = t.id
+                where t.id = ?
+                order by t.table_name, c.ordinal_position nulls last, c.column_name
+                """,
+            (resultSet, rowNumber) -> new StoredClassifierTableRow(
+                UUID.fromString(resultSet.getString("table_id")),
+                resultSet.getString("table_name"),
+                resultSet.getString("description"),
+                resultSet.getString("system_type"),
+                resultSet.getString("column_id") == null ? null : UUID.fromString(resultSet.getString("column_id")),
+                resultSet.getString("column_name"),
+                resultSet.getString("data_type"),
+                resultSet.getString("column_description"),
+                (Boolean) resultSet.getObject("nullable"),
+                (Integer) resultSet.getObject("ordinal_position")
+            ),
+            tableId
+        );
+
+        if (rows.isEmpty()) {
+            throw new EntityNotFoundException("Jadval topilmadi: " + tableId);
+        }
+
+        return mapStoredTablesFromRows(rows).get(0);
+    }
+
     private void ensureClassifierTableMetadataImported() {
         if (!classifierMetadataTablesExist() || !stagingMetadataTableExists()) {
             return;
@@ -341,8 +590,9 @@ public class ClassifierService {
             return;
         }
 
+        var classifierTableCount = countRows(CLASSIFIER_TABLES_NAME);
         var classifierColumnCount = countRows(CLASSIFIER_TABLE_COLUMNS_NAME);
-        if (classifierColumnCount == stagingRowCount) {
+        if (classifierTableCount > 0 && classifierColumnCount > 0) {
             return;
         }
 
@@ -367,6 +617,7 @@ public class ClassifierService {
                         t.table_name,
                         t.description,
                         t.system_type,
+                        c.id as column_id,
                         c.column_name,
                         c.data_type,
                         c.column_description,
@@ -382,6 +633,7 @@ public class ClassifierService {
                     resultSet.getString("table_name"),
                     resultSet.getString("description"),
                     resultSet.getString("system_type"),
+                    resultSet.getString("column_id") == null ? null : UUID.fromString(resultSet.getString("column_id")),
                     resultSet.getString("column_name"),
                     resultSet.getString("data_type"),
                     resultSet.getString("column_description"),
@@ -394,26 +646,30 @@ public class ClassifierService {
                 return List.of();
             }
 
-            var tables = new LinkedHashMap<UUID, StoredTableAccumulator>();
-            for (var row : rows) {
-                var tableName = trimToNull(row.tableName());
-                if (tableName == null) {
-                    continue;
-                }
-
-                var accumulator = tables.computeIfAbsent(
-                    row.tableId(),
-                    key -> new StoredTableAccumulator(tableName, row.description(), row.systemType())
-                );
-                accumulator.addColumn(row);
-            }
-
-            return tables.values().stream()
-                .map(StoredTableAccumulator::toTableItem)
-                .toList();
+            return mapStoredTablesFromRows(rows);
         } catch (DataAccessException exception) {
             return List.of();
         }
+    }
+
+    private List<ClassifierDtos.TableItem> mapStoredTablesFromRows(List<StoredClassifierTableRow> rows) {
+        var tables = new LinkedHashMap<UUID, StoredTableAccumulator>();
+        for (var row : rows) {
+            var tableName = trimToNull(row.tableName());
+            if (tableName == null) {
+                continue;
+            }
+
+            var accumulator = tables.computeIfAbsent(
+                row.tableId(),
+                key -> new StoredTableAccumulator(row.tableId(), tableName, row.description(), row.systemType())
+            );
+            accumulator.addColumn(row);
+        }
+
+        return tables.values().stream()
+            .map(StoredTableAccumulator::toTableItem)
+            .toList();
     }
 
     private List<TableMetadataRow> loadRowsFromStagingMetadata() {
@@ -575,6 +831,7 @@ public class ClassifierService {
                 order by c.ordinal_position
                 """,
             (resultSet, rowNumber) -> new ClassifierDtos.TableColumnItem(
+                null,
                 resultSet.getString("column_name"),
                 resultSet.getString("data_type"),
                 trimToNull(resultSet.getString("column_description")),
@@ -725,6 +982,7 @@ public class ClassifierService {
         String tableName,
         String description,
         String systemType,
+        UUID columnId,
         String columnName,
         String dataType,
         String columnDescription,
@@ -814,6 +1072,7 @@ public class ClassifierService {
             var ordinalPosition = 1;
             for (var row : columnsByName.values()) {
                 columns.add(new ClassifierDtos.TableColumnItem(
+                    null,
                     row.columnName(),
                     buildColumnDataType(row.columnType(), row.columnLength()),
                     buildColumnDescription(row.columnNameDefinition()),
@@ -823,6 +1082,7 @@ public class ClassifierService {
             }
 
             return new ClassifierDtos.TableItem(
+                null,
                 entityName,
                 buildTableDescription(entityName, entityDefinition, systemType),
                 systemType,
@@ -833,12 +1093,14 @@ public class ClassifierService {
 
     private static final class StoredTableAccumulator {
 
+        private final UUID tableId;
         private final String tableName;
         private final String description;
         private final String systemType;
         private final List<ClassifierDtos.TableColumnItem> columns = new ArrayList<>();
 
-        private StoredTableAccumulator(String tableName, String description, String systemType) {
+        private StoredTableAccumulator(UUID tableId, String tableName, String description, String systemType) {
+            this.tableId = tableId;
             this.tableName = tableName;
             this.description = description;
             this.systemType = systemType;
@@ -851,6 +1113,7 @@ public class ClassifierService {
             }
 
             columns.add(new ClassifierDtos.TableColumnItem(
+                row.columnId(),
                 columnName,
                 row.dataType(),
                 trim(row.columnDescription()),
@@ -861,6 +1124,7 @@ public class ClassifierService {
 
         private ClassifierDtos.TableItem toTableItem() {
             return new ClassifierDtos.TableItem(
+                tableId,
                 tableName,
                 description,
                 systemType,

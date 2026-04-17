@@ -24,6 +24,7 @@ spring:
     time-zone: Asia/Tashkent
 
 server:
+  address: ${SERVER_ADDRESS:0.0.0.0}
   port: ${SERVER_PORT:8070}
 
 management:
@@ -37,7 +38,28 @@ app:
     issuer: logical-control
     secret: logical-control-super-secure-jwt-secret-key-2026-change-me
     access-token-expiration-minutes: 720
+  sql-runner:
+    enabled: true
+    max-result-rows: 1000
+    query-timeout-seconds: 120
+    history-ttl-minutes: 15
+    etranzit:
+      allowed-server-name: etran.db.gtk
+      jdbc-url: jdbc:as400://etran.db.gtk/ETRANZIT
+      username: ${ETRANZIT_DB_USERNAME:etranzits}
+      password: ${ETRANZIT_DB_PASSWORD:nB4EaEtU}
+      driver-class-name: com.ibm.as400.access.AS400JDBCDriver
+  classifier-table-sync:
+    enabled: true
+    run-on-startup: true
+    initial-delay-ms: 21600000
+    fixed-delay-ms: 21600000
+    schema-name: ETRANZIT
   cors:
     allowed-origins:
+      - http://localhost
+      - http://127.0.0.1
+      - http://192.168.224.241
       - http://localhost:5173
       - http://127.0.0.1:5173
+      - http://192.168.224.241:5173

@@ -235,6 +235,8 @@ public class LogicalControlService {
             .code(uniqueNumber)
             .name(source.getName() + " copy")
             .objective(source.getObjective())
+            .basis(source.getBasis())
+            .tableName(source.getTableName())
             .basisFileName(source.getBasisFileName())
             .basisFileContentType(source.getBasisFileContentType())
             .basisFileSize(source.getBasisFileSize())
@@ -366,6 +368,8 @@ public class LogicalControlService {
         control.setCode(code);
         control.setName(defaultIfBlank(request.name(), defaultIfBlank(control.getName(), uniqueNumber)));
         control.setObjective(request.objective());
+        control.setBasis(trimToNull(request.basis()));
+        control.setTableName(trimToNull(request.tableName()));
         applyBasisFile(control, request);
         control.setSystemName(defaultIfBlank(request.systemName(), defaultIfBlank(control.getSystemName(), DEFAULT_SYSTEM_NAME)));
         control.setApprovers(listOrEmpty(request.approvers()));
@@ -428,6 +432,8 @@ public class LogicalControlService {
     ) {
         control.setName(defaultIfBlank(request.name(), defaultIfBlank(control.getName(), DEFAULT_CONTROL_NAME)));
         control.setObjective(request.objective());
+        control.setBasis(trimToNull(request.basis()));
+        control.setTableName(trimToNull(request.tableName()));
         applyBasisFile(control, request);
         control.setSystemName(defaultIfBlank(request.systemName(), defaultIfBlank(control.getSystemName(), DEFAULT_SYSTEM_NAME)));
         control.setStartDate(request.startDate());
@@ -514,6 +520,8 @@ public class LogicalControlService {
             control.getCode(),
             control.getName(),
             control.getObjective(),
+            defaultIfBlank(control.getBasis(), ""),
+            defaultIfBlank(control.getTableName(), ""),
             control.getBasisFileName(),
             control.getBasisFileContentType(),
             control.getBasisFileSize(),
@@ -572,6 +580,8 @@ public class LogicalControlService {
         overview.setUniqueNumber(control.getUniqueNumber());
         overview.setName(control.getName());
         overview.setObjective(control.getObjective());
+        overview.setBasis(control.getBasis());
+        overview.setTableName(control.getTableName());
         overview.setBasisFileName(control.getBasisFileName());
         overview.setBasisFileContentType(control.getBasisFileContentType());
         overview.setBasisFileSize(control.getBasisFileSize());

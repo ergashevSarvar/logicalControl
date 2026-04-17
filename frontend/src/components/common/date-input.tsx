@@ -1,3 +1,4 @@
+import { CalendarDays } from "lucide-react"
 import { useEffect, useState, type ComponentProps } from "react"
 
 import { Input } from "@/components/ui/input"
@@ -8,7 +9,17 @@ type DateInputProps = Omit<ComponentProps<"input">, "type" | "value" | "onChange
   onChange: (value: string) => void
 }
 
-export function DateInput({ value, onChange, className, placeholder = "dd.mm.yyyy", onBlur, ...props }: DateInputProps) {
+export function DateInput({
+  value,
+  onChange,
+  className,
+  placeholder = "dd.mm.yyyy",
+  onBlur,
+  min,
+  max,
+  disabled,
+  ...props
+}: DateInputProps) {
   const [displayValue, setDisplayValue] = useState(() => (value ? formatIsoDate(value, "") : ""))
 
   useEffect(() => {
@@ -16,35 +27,57 @@ export function DateInput({ value, onChange, className, placeholder = "dd.mm.yyy
   }, [value])
 
   return (
-    <Input
-      {...props}
-      type="text"
-      inputMode="numeric"
-      autoComplete="off"
-      placeholder={placeholder}
-      maxLength={10}
-      value={displayValue}
-      onChange={(event) => {
-        const nextDisplayValue = normalizeDateInput(event.target.value)
-        setDisplayValue(nextDisplayValue)
+    <div className="relative">
+      <Input
+        {...props}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        disabled={disabled}
+        placeholder={placeholder}
+        maxLength={10}
+        value={displayValue}
+        onChange={(event) => {
+          const nextDisplayValue = normalizeDateInput(event.target.value)
+          setDisplayValue(nextDisplayValue)
 
-        if (!nextDisplayValue) {
-          onChange("")
-          return
-        }
+          if (!nextDisplayValue) {
+            onChange("")
+            return
+          }
 
-        const parsed = parseDisplayDateToIso(nextDisplayValue)
-        if (parsed) {
-          onChange(parsed)
-        }
-      }}
-      onBlur={(event) => {
-        if (displayValue && !parseDisplayDateToIso(displayValue)) {
-          setDisplayValue(value ? formatIsoDate(value, "") : "")
-        }
-        onBlur?.(event)
-      }}
-      className={cn(className)}
-    />
+          const parsed = parseDisplayDateToIso(nextDisplayValue)
+          if (parsed) {
+            onChange(parsed)
+          }
+        }}
+        onBlur={(event) => {
+          if (displayValue && !parseDisplayDateToIso(displayValue)) {
+            setDisplayValue(value ? formatIsoDate(value, "") : "")
+          }
+          onBlur?.(event)
+        }}
+        className={cn("pr-11", className)}
+      />
+
+      <div className="pointer-events-none absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground">
+        <CalendarDays className="size-4" />
+      </div>
+
+      <input
+        type="date"
+        value={value ?? ""}
+        min={min}
+        max={max}
+        disabled={disabled}
+        aria-label="Sanani tanlash"
+        className="absolute inset-y-1 right-1 w-10 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        onChange={(event) => {
+          const nextValue = event.target.value
+          setDisplayValue(nextValue ? formatIsoDate(nextValue, "") : "")
+          onChange(nextValue)
+        }}
+      />
+    </div>
   )
 }

@@ -17,6 +17,8 @@ public class ClassifierCacheWarmup {
         classifierService.listDepartments();
         classifierService.listProcessStages();
         classifierService.listSystemTypes();
+        classifierService.listTables();
+        classifierService.listServers();
     }
 }
 

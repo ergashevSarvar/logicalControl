@@ -5,9 +5,12 @@ import type {
   ClassifierDepartmentRequest,
   ClassifierProcessStage,
   ClassifierProcessStageRequest,
+  ClassifierServer,
+  ClassifierServerRequest,
   ClassifierSystemType,
   ClassifierSystemTypeRequest,
   ClassifierTable,
+  ClassifierTableRequest,
   ControlDetail,
   ControlListItem,
   ControlOverviewRequest,
@@ -17,10 +20,13 @@ import type {
   LoginResponse,
   LogsResponse,
   LookupResponse,
+  SqlQueryExecutionRequest,
+  SqlQueryExecutionStartResponse,
+  SqlQueryExecutionStatusResponse,
   UserProfile,
 } from "@/lib/types";
 
-const baseURL = import.meta.env.VITE_API_URL ?? "http://localhost:8070/api";
+const baseURL = import.meta.env.VITE_API_URL?.trim() || "/api";
 const tokenKey = "logical-control.token";
 
 export const api = axios.create({
@@ -120,6 +126,21 @@ export async function duplicateControl(id: string) {
   return data;
 }
 
+export async function startSqlQueryExecution(payload: SqlQueryExecutionRequest) {
+  const { data } = await api.post<SqlQueryExecutionStartResponse>("/sql-runner/executions", payload);
+  return data;
+}
+
+export async function fetchSqlQueryExecutionStatus(executionId: string) {
+  const { data } = await api.get<SqlQueryExecutionStatusResponse>(`/sql-runner/executions/${executionId}`);
+  return data;
+}
+
+export async function cancelSqlQueryExecution(executionId: string) {
+  const { data } = await api.post<SqlQueryExecutionStatusResponse>(`/sql-runner/executions/${executionId}/cancel`);
+  return data;
+}
+
 export async function fetchLogs(result?: string) {
   const { data } = await api.get<LogsResponse>("/logs", {
     params: result ? { result } : undefined,
@@ -175,9 +196,23 @@ export async function fetchClassifierSystemTypes() {
   return data;
 }
 
+export async function fetchClassifierServers() {
+  const { data } = await api.get<ClassifierServer[]>("/classifiers/servers");
+  return data;
+}
+
 export async function fetchClassifierTables() {
   const { data } = await api.get<ClassifierTable[]>("/classifiers/tables");
   return data;
+}
+
+export async function updateClassifierTable(id: string, payload: ClassifierTableRequest) {
+  const { data } = await api.put<ClassifierTable>(`/classifiers/tables/${id}`, payload);
+  return data;
+}
+
+export async function deleteClassifierTable(id: string) {
+  await api.delete(`/classifiers/tables/${id}`);
 }
 
 export async function createClassifierSystemType(payload: ClassifierSystemTypeRequest) {
@@ -192,4 +227,18 @@ export async function updateClassifierSystemType(id: string, payload: Classifier
 
 export async function deleteClassifierSystemType(id: string) {
   await api.delete(`/classifiers/system-types/${id}`);
+}
+
+export async function createClassifierServer(payload: ClassifierServerRequest) {
+  const { data } = await api.post<ClassifierServer>("/classifiers/servers", payload);
+  return data;
+}
+
+export async function updateClassifierServer(id: string, payload: ClassifierServerRequest) {
+  const { data } = await api.put<ClassifierServer>(`/classifiers/servers/${id}`, payload);
+  return data;
+}
+
+export async function deleteClassifierServer(id: string) {
+  await api.delete(`/classifiers/servers/${id}`);
 }

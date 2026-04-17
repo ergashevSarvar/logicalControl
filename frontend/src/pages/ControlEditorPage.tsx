@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, FileText, Maximize2, Minimize2, Upload, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, FileText, Maximize2, Minimize2, Plus, Upload, X } from "lucide-react";
 
 import { TagInput } from "@/components/common/tag-input";
 import { DateInput } from "@/components/common/date-input";
 import { RuleCanvasEditor } from "@/components/rules/rule-canvas-editor";
+import { RuleCanvasComplexEditor, type RuleCanvasComplexEditorHandle } from "@/components/rules/rule-canvas-complex-editor";
+import { RuleCanvasFormEditor } from "@/components/rules/rule-canvas-form-editor";
 import {
   Tabs,
   TabsList,
@@ -36,11 +38,13 @@ import {
   updateControl,
 } from "@/lib/api";
 import {
+  buildClassifierTableOptions,
   buildSystemNameOptions,
   buildProcessStageOptions,
   classifierQueryKeys,
   getClassifierProcessStages,
   getClassifierSystemTypes,
+  getClassifierTables,
   getDefaultProcessStageName,
   getDefaultSystemName,
   resolveProcessStageValue,
@@ -182,6 +186,8 @@ function buildOverviewRequest(values: ControlRequest): ControlOverviewRequest {
   return {
     name: values.name,
     objective: values.objective,
+    basis: values.basis,
+    tableName: values.tableName,
     basisFileName: values.basisFileName,
     basisFileContentType: values.basisFileContentType,
     basisFileSize: values.basisFileSize,
@@ -203,6 +209,7 @@ function buildOverviewRequest(values: ControlRequest): ControlOverviewRequest {
 function mergeAutosavedDetail(detail: ControlDetail, currentValues: ControlRequest): ControlDetail {
   return {
     ...detail,
+    tableName: detail.tableName || currentValues.tableName,
     approvers: currentValues.approvers,
     messages: currentValues.messages,
     authorName: currentValues.authorName,
@@ -255,6 +262,8 @@ function areCanvasStatesEqual(left: Record<string, unknown>, right: Record<strin
 }
 
 type EditorStep = (typeof stepIds)[number];
+type BuilderViewMode = "constructor" | "standard";
+type StandardBuilderViewMode = "complex" | "simple";
 
 export function ControlEditorPage() {
   const { t } = useTranslation();
@@ -264,7 +273,10 @@ export function ControlEditorPage() {
   const routeControlId = params.id ?? null;
   const [currentStep, setCurrentStep] = useState<EditorStep>("overview");
   const [isBuilderExpanded, setIsBuilderExpanded] = useState(false);
+  const [builderViewMode, setBuilderViewMode] = useState<BuilderViewMode>("standard");
+  const [standardBuilderViewMode, setStandardBuilderViewMode] = useState<StandardBuilderViewMode>("complex");
   const [persistedControlId, setPersistedControlId] = useState<string | null>(routeControlId);
+  const complexEditorRef = useRef<RuleCanvasComplexEditorHandle | null>(null);
 
   const form = useForm<ControlRequest>({
     defaultValues: createDefaultControlRequest(),
@@ -273,7 +285,7 @@ export function ControlEditorPage() {
     defaultValue: "Boshlanish sana yakunlanish sanasidan oldin bo'lishi kerak",
   });
   const pdfOnlyMessage = t("editor.validation.basisFilePdfOnly", {
-    defaultValue: "Mantiqiy nazorat asosi uchun faqat PDF fayl yuklash mumkin",
+    defaultValue: "Mantiqiy nazorat asosi hujjati uchun faqat PDF fayl yuklash mumkin",
   });
   const requiredMessages = {
     deploymentScope: t("editor.validation.deploymentScopeRequired", {
@@ -293,6 +305,9 @@ export function ControlEditorPage() {
     }),
     processStage: t("editor.validation.processStageRequired", {
       defaultValue: "Mantiqiy nazorat bosqichini tanlash majburiy",
+    }),
+    tableName: t("editor.validation.tableNameRequired", {
+      defaultValue: "Jadvalni tanlash majburiy",
     }),
     objective: t("editor.validation.objectiveRequired", {
       defaultValue: "Mantiqiy nazorat maqsadini to'ldirish majburiy",
@@ -325,6 +340,12 @@ export function ControlEditorPage() {
   const processStagesQuery = useQuery({
     queryKey: classifierQueryKeys.processStages,
     queryFn: getClassifierProcessStages,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
+  const tablesQuery = useQuery({
+    queryKey: classifierQueryKeys.tables,
+    queryFn: getClassifierTables,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 1000 * 60 * 60,
   });
@@ -441,9 +462,12 @@ export function ControlEditorPage() {
   const watchSms = form.watch("smsNotificationEnabled");
   const watchUniqueNumber = form.watch("uniqueNumber");
   const watchProcessStage = form.watch("processStage");
+  const watchTableName = form.watch("tableName");
   const watchConfidentiality = form.watch("confidentialityLevel");
   const watchRuleCanvas = form.watch("ruleBuilderCanvas");
   const watchControlName = form.watch("name");
+  const builderContentHeightClassName = isBuilderExpanded ? "h-[calc(100vh-12rem)] min-h-0" : "h-[74vh] min-h-[680px]";
+  const isComplexStandardMode = builderViewMode === "standard" && standardBuilderViewMode === "complex";
   const watchBasisFileName = form.watch("basisFileName");
   const watchBasisFileSize = form.watch("basisFileSize");
   const watchBasisFileContentType = form.watch("basisFileContentType");
@@ -480,6 +504,11 @@ export function ControlEditorPage() {
     () => buildSystemNameOptions(systemTypesQuery.data ?? [], normalizedDeploymentScope, watchSystemName),
     [normalizedDeploymentScope, systemTypesQuery.data, watchSystemName],
   );
+  const isDataEntryStage = resolveProcessStageValue(watchProcessStage) === "Ma'lumot kiritish";
+  const availableTableOptions = useMemo(
+    () => buildClassifierTableOptions(tablesQuery.data ?? [], watchSystemName, watchTableName),
+    [tablesQuery.data, watchSystemName, watchTableName],
+  );
 
   useEffect(() => {
     const currentSystemName = form.getValues("systemName");
@@ -502,6 +531,27 @@ export function ControlEditorPage() {
       });
     }
   }, [availableSystemNameOptions, form, normalizedDeploymentScope, systemTypesQuery.data]);
+
+  useEffect(() => {
+    if (!isDataEntryStage) {
+      if (form.getValues("tableName")) {
+        form.setValue("tableName", "", {
+          shouldDirty: false,
+          shouldTouch: false,
+          shouldValidate: false,
+        });
+      }
+      return;
+    }
+
+    if (watchTableName && !availableTableOptions.includes(watchTableName)) {
+      form.setValue("tableName", "", {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [availableTableOptions, form, isDataEntryStage, watchTableName]);
 
   useEffect(() => {
     if (!watchStartDate && !watchFinishDate) {
@@ -542,7 +592,11 @@ export function ControlEditorPage() {
         watchDeploymentScope === "INTERNAL"
           ? [...OVERVIEW_REQUIRED_FIELDS, "directionType"]
           : OVERVIEW_REQUIRED_FIELDS;
-      const isValid = await form.trigger(fieldsToValidate, { shouldFocus: true });
+      const overviewFieldsToValidate: Array<keyof ControlRequest> =
+        isDataEntryStage && availableTableOptions.length > 0
+          ? [...fieldsToValidate, "tableName"]
+          : fieldsToValidate;
+      const isValid = await form.trigger(overviewFieldsToValidate, { shouldFocus: true });
       if (!isValid) {
         return;
       }
@@ -771,7 +825,7 @@ export function ControlEditorPage() {
                   />
                   <Field
                     label="Mantiqiy nazorat nomi"
-                    className="lg:col-span-8"
+                    className="lg:col-span-12"
                     error={form.formState.errors.name?.message}
                   >
                     <Input
@@ -786,7 +840,7 @@ export function ControlEditorPage() {
                     render={({ field, fieldState }) => (
                       <Field
                         label="Mantiqiy nazorat bosqichi"
-                        className="lg:col-span-4"
+                        className={isDataEntryStage ? "lg:col-span-4" : "lg:col-span-12"}
                         error={fieldState.error?.message}
                       >
                         <SearchableSelect
@@ -802,6 +856,31 @@ export function ControlEditorPage() {
                       </Field>
                     )}
                   />
+                  {isDataEntryStage ? (
+                    <Controller
+                      control={form.control}
+                      name="tableName"
+                      rules={availableTableOptions.length > 0 ? { required: requiredMessages.tableName } : undefined}
+                      render={({ field, fieldState }) => (
+                        <Field label="Jadval" className="lg:col-span-8" error={fieldState.error?.message}>
+                          <SearchableSelect
+                            value={field.value}
+                            onChange={field.onChange}
+                            options={availableTableOptions}
+                            placeholder={
+                              tablesQuery.isLoading
+                                ? "Jadvallar yuklanmoqda..."
+                                : availableTableOptions.length === 0
+                                  ? "Mos jadval topilmadi"
+                                  : "Jadvalni tanlang"
+                            }
+                            disabled={tablesQuery.isLoading || availableTableOptions.length === 0}
+                            hasError={Boolean(fieldState.error)}
+                          />
+                        </Field>
+                      )}
+                    />
+                  ) : null}
                   <Field
                     label="Mantiqiy nazorat maqsadi"
                     className="lg:col-span-12"
@@ -814,6 +893,9 @@ export function ControlEditorPage() {
                     />
                   </Field>
                   <Field label="Mantiqiy nazorat asosi" className="lg:col-span-12">
+                    <Input {...form.register("basis")} />
+                  </Field>
+                  <Field label="Mantiqiy nazorat asosi hujjati" className="lg:col-span-12">
                     <BasisFileDropzone
                       fileName={watchBasisFileName}
                       fileSize={watchBasisFileSize}
@@ -946,36 +1028,111 @@ export function ControlEditorPage() {
               )}
             >
               <CardHeader className="flex flex-row items-center justify-between gap-3">
-                <div>
-                  <CardTitle>{`Visual builder (${watchControlName || "Mantiqiy nazorat"})`}</CardTitle>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:gap-3">
+                    <Tabs value={builderViewMode} onValueChange={(value) => setBuilderViewMode(value as BuilderViewMode)}>
+                      <TabsList className="relative grid h-auto w-full max-w-[320px] grid-cols-2 gap-1.5 rounded-[18px] bg-muted/80 p-1">
+                        <TabsTrigger type="button" value="standard" className="h-10">
+                          Odatiy
+                        </TabsTrigger>
+                        <TabsTrigger type="button" value="constructor" className="h-10">
+                          Konstruktor
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    <div className="inline-flex h-10 min-w-0 items-center self-start rounded-[18px] border border-border/70 bg-background/88 px-4 text-sm text-foreground shadow-[0_12px_24px_-22px_rgba(15,23,42,0.22)]">
+                      <span className="max-w-[24rem] truncate font-medium">{watchControlName || "Mantiqiy nazorat"}</span>
+                    </div>
+                  </div>
+                  {builderViewMode === "standard" ? (
+                    <Tabs
+                      value={standardBuilderViewMode}
+                      onValueChange={(value) => setStandardBuilderViewMode(value as StandardBuilderViewMode)}
+                    >
+                      <TabsList className="relative grid h-auto w-full max-w-[280px] grid-cols-2 gap-1 rounded-[14px] border border-border/70 bg-background/85 p-0.5">
+                        <TabsTrigger type="button" value="complex" className="h-8 text-[11px] font-semibold">
+                          Murakkab
+                        </TabsTrigger>
+                        <TabsTrigger type="button" value="simple" className="h-8 text-[11px] font-semibold">
+                          Oddiy
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  ) : null}
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isTransitionPending}
-                  onClick={() => setIsBuilderExpanded((current) => !current)}
-                >
-                  {isBuilderExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-                  {isBuilderExpanded ? "Kichraytirish" : "Kattalashtirish"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {isComplexStandardMode ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isTransitionPending}
+                      onClick={() => complexEditorRef.current?.addCondition()}
+                    >
+                      <Plus className="size-4" />
+                      Qo'shimcha shart qo'shish
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isTransitionPending}
+                    onClick={() => setIsBuilderExpanded((current) => !current)}
+                  >
+                    {isBuilderExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                    {isBuilderExpanded ? "Kichraytirish" : "Kattalashtirish"}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className={cn(isBuilderExpanded ? "h-[calc(100vh-8.5rem)]" : "")}>
-                <RuleCanvasEditor
-                  canvas={watchRuleCanvas}
-                  preferredSystemType={form.watch("systemName")}
-                  rootLabel={watchControlName || "Mantiqiy nazorat"}
-                  canvasHeightClassName={isBuilderExpanded ? "h-[calc(100vh-12rem)] min-h-0" : "h-[74vh] min-h-[680px]"}
-                  onCanvasChange={(ruleBuilderCanvas) =>
-                    areCanvasStatesEqual(watchRuleCanvas, ruleBuilderCanvas)
-                      ? undefined
-                      : form.setValue("ruleBuilderCanvas", ruleBuilderCanvas, {
-                          shouldDirty: true,
-                          shouldTouch: false,
-                          shouldValidate: false,
-                        })
-                  }
-                />
+                {builderViewMode === "constructor" ? (
+                  <RuleCanvasEditor
+                    canvas={watchRuleCanvas}
+                    preferredSystemType={form.watch("systemName")}
+                    rootLabel={watchControlName || "Mantiqiy nazorat"}
+                    canvasHeightClassName={builderContentHeightClassName}
+                    onCanvasChange={(ruleBuilderCanvas) =>
+                      areCanvasStatesEqual(watchRuleCanvas, ruleBuilderCanvas)
+                        ? undefined
+                        : form.setValue("ruleBuilderCanvas", ruleBuilderCanvas, {
+                            shouldDirty: true,
+                            shouldTouch: false,
+                            shouldValidate: false,
+                          })
+                    }
+                  />
+                ) : standardBuilderViewMode === "complex" ? (
+                  <RuleCanvasComplexEditor
+                    ref={complexEditorRef}
+                    canvas={watchRuleCanvas}
+                    className={builderContentHeightClassName}
+                    onCanvasChange={(ruleBuilderCanvas) =>
+                      areCanvasStatesEqual(watchRuleCanvas, ruleBuilderCanvas)
+                        ? undefined
+                        : form.setValue("ruleBuilderCanvas", ruleBuilderCanvas, {
+                            shouldDirty: true,
+                            shouldTouch: false,
+                            shouldValidate: false,
+                          })
+                    }
+                  />
+                ) : (
+                  <RuleCanvasFormEditor
+                    canvas={watchRuleCanvas}
+                    preferredSystemType={form.watch("systemName")}
+                    rootLabel={watchControlName || "Mantiqiy nazorat"}
+                    className={builderContentHeightClassName}
+                    onCanvasChange={(ruleBuilderCanvas) =>
+                      areCanvasStatesEqual(watchRuleCanvas, ruleBuilderCanvas)
+                        ? undefined
+                        : form.setValue("ruleBuilderCanvas", ruleBuilderCanvas, {
+                            shouldDirty: true,
+                            shouldTouch: false,
+                            shouldValidate: false,
+                          })
+                    }
+                  />
+                )}
               </CardContent>
             </Card>
         ) : null}
@@ -1252,26 +1409,28 @@ function BasisFileDropzone({
         }}
         onDrop={handleDrop}
         className={cn(
-          "rounded-[22px] border border-dashed px-5 py-6 transition-colors",
+          "rounded-[20px] border border-dashed px-4 py-4 transition-colors",
           isDragging ? "border-primary bg-primary/5" : "border-border/70 bg-background/70",
         )}
       >
-        <div className="flex flex-col items-center justify-center gap-3 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Upload className="size-5" />
+        <div className="flex flex-col gap-3 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+          <div className="flex flex-1 items-center gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Upload className="size-4.5" />
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Faylni bu yerga tashlang yoki tanlang</p>
+              <p className="text-xs text-muted-foreground">Faqat PDF fayl yuklashingiz mumkin.</p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <p className="font-medium text-foreground">Faylni bu yerga tashlang yoki brauzer orqali tanlang</p>
-            <p className="text-sm text-muted-foreground">Faqat PDF fayl yuklashingiz mumkin.</p>
-          </div>
-          <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
+          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
             Fayl tanlash
           </Button>
         </div>
       </div>
 
       {hasFile ? (
-        <div className="flex flex-col gap-3 rounded-[18px] border border-border/70 bg-background/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2.5 rounded-[18px] border border-border/70 bg-background/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
               <FileText className="size-4" />

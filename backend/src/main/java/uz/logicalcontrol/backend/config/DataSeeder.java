@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.logicalcontrol.backend.entity.ChangeLogEntity;
 import uz.logicalcontrol.backend.entity.ClassifierDepartmentEntity;
 import uz.logicalcontrol.backend.entity.ClassifierProcessStageEntity;
+import uz.logicalcontrol.backend.entity.ClassifierServerEntity;
 import uz.logicalcontrol.backend.entity.ClassifierSystemTypeEntity;
 import uz.logicalcontrol.backend.entity.DictionaryEntryEntity;
 import uz.logicalcontrol.backend.entity.ExceptionEntryEntity;
@@ -27,6 +28,7 @@ import uz.logicalcontrol.backend.entity.UserEntity;
 import uz.logicalcontrol.backend.repository.ChangeLogRepository;
 import uz.logicalcontrol.backend.repository.ClassifierDepartmentRepository;
 import uz.logicalcontrol.backend.repository.ClassifierProcessStageRepository;
+import uz.logicalcontrol.backend.repository.ClassifierServerRepository;
 import uz.logicalcontrol.backend.repository.ClassifierSystemTypeRepository;
 import uz.logicalcontrol.backend.repository.DictionaryEntryRepository;
 import uz.logicalcontrol.backend.repository.ExceptionEntryRepository;
@@ -40,6 +42,9 @@ import uz.logicalcontrol.backend.repository.UserRepository;
 public class DataSeeder implements CommandLineRunner {
 
     private record ProcessStageSeed(String name, String description, int sortOrder) {
+    }
+
+    private record ServerSeed(String name, String description) {
     }
 
     private static final List<ProcessStageSeed> REQUIRED_PROCESS_STAGES = List.of(
@@ -62,6 +67,17 @@ public class DataSeeder implements CommandLineRunner {
         new ProcessStageSeed("Keyingi manzilga yuborilgan", "Keyingi manzilga yuborish bosqichi.", 17)
     );
 
+    private static final List<ServerSeed> REQUIRED_SERVERS = List.of(
+        new ServerSeed("etran.db.gtk", "ETRAN asosiy serveri"),
+        new ServerSeed("dbtest.db.gtk", "Test muhiti serveri"),
+        new ServerSeed("mat.db.gtk", "MAT serveri"),
+        new ServerSeed("ed1.db.gtk", "ED1 serveri"),
+        new ServerSeed("arxiv.db.gtk", "Arxiv serveri"),
+        new ServerSeed("ebr02.db.gtk", "EBR02 serveri"),
+        new ServerSeed("ebr01.db.gtk", "EBR01 serveri"),
+        new ServerSeed("Dc1paym01.db.gtk", "To'lovlar serveri")
+    );
+
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final LogicalControlRepository logicalControlRepository;
@@ -71,6 +87,7 @@ public class DataSeeder implements CommandLineRunner {
     private final ExceptionEntryRepository exceptionEntryRepository;
     private final ClassifierDepartmentRepository classifierDepartmentRepository;
     private final ClassifierProcessStageRepository classifierProcessStageRepository;
+    private final ClassifierServerRepository classifierServerRepository;
     private final ClassifierSystemTypeRepository classifierSystemTypeRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -185,6 +202,7 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         seedRequiredProcessStages();
+        seedRequiredServers();
 
         if (classifierSystemTypeRepository.count() == 0) {
             seedRequiredSystemTypes();
@@ -282,6 +300,19 @@ public class DataSeeder implements CommandLineRunner {
             entity.setActive(true);
 
             classifierProcessStageRepository.save(entity);
+        });
+    }
+
+    private void seedRequiredServers() {
+        REQUIRED_SERVERS.forEach(server -> {
+            var entity = classifierServerRepository.findByNameIgnoreCase(server.name())
+                .orElseGet(() -> ClassifierServerEntity.builder().name(server.name()).build());
+
+            entity.setName(server.name());
+            entity.setDescription(server.description());
+            entity.setActive(true);
+
+            classifierServerRepository.save(entity);
         });
     }
 

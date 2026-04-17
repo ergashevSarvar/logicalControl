@@ -105,4 +105,44 @@ public class ClassifierController {
     public ResponseEntity<List<ClassifierDtos.TableItem>> listTables() {
         return ResponseEntity.ok(classifierService.listTables());
     }
+
+    @PutMapping("/tables/{id}")
+    public ResponseEntity<ClassifierDtos.TableItem> updateTable(
+        @PathVariable("id") UUID id,
+        @Valid @RequestBody ClassifierDtos.TableRequest request
+    ) {
+        return ResponseEntity.ok(classifierService.updateTable(id, request));
+    }
+
+    @DeleteMapping("/tables/{id}")
+    public ResponseEntity<Void> deleteTable(@PathVariable("id") UUID id) {
+        classifierService.deleteTable(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/servers")
+    public ResponseEntity<List<ClassifierDtos.ServerItem>> listServers() {
+        return ResponseEntity.ok(classifierService.listServers());
+    }
+
+    @PostMapping("/servers")
+    public ResponseEntity<ClassifierDtos.ServerItem> createServer(
+        @Valid @RequestBody ClassifierDtos.ServerRequest request
+    ) {
+        return ResponseEntity.ok(classifierService.createServer(request));
+    }
+
+    @PutMapping("/servers/{id}")
+    public ResponseEntity<ClassifierDtos.ServerItem> updateServer(
+        @PathVariable("id") UUID id,
+        @Valid @RequestBody ClassifierDtos.ServerRequest request
+    ) {
+        return ResponseEntity.ok(classifierService.updateServer(id, request));
+    }
+
+    @DeleteMapping("/servers/{id}")
+    public ResponseEntity<Void> deleteServer(@PathVariable("id") UUID id) {
+        classifierService.deleteServer(id);
+        return ResponseEntity.noContent().build();
+    }
 }

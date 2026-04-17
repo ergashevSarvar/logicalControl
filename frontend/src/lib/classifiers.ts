@@ -1,12 +1,14 @@
 import {
   fetchClassifierDepartments,
   fetchClassifierProcessStages,
+  fetchClassifierServers,
   fetchClassifierSystemTypes,
   fetchClassifierTables,
 } from "@/lib/api";
 import type {
   ClassifierDepartment,
   ClassifierProcessStage,
+  ClassifierServer,
   ClassifierSystemType,
   ClassifierTable,
   DeploymentScope,
@@ -34,6 +36,7 @@ export const classifierQueryKeys = {
   processStages: ["classifiers", "processStages"] as const,
   systemTypes: ["classifiers", "systemTypes"] as const,
   tables: ["classifiers", "tables"] as const,
+  servers: ["classifiers", "servers"] as const,
 };
 
 export function sortClassifierDepartments(rows: ClassifierDepartment[]) {
@@ -48,6 +51,10 @@ export function sortClassifierProcessStages(rows: ClassifierProcessStage[]) {
 
 export function sortClassifierSystemTypes(rows: ClassifierSystemType[]) {
   return [...rows].sort((left, right) => left.systemName.localeCompare(right.systemName, "uz"));
+}
+
+export function sortClassifierServers(rows: ClassifierServer[]) {
+  return [...rows].sort((left, right) => left.name.localeCompare(right.name, "uz"));
 }
 
 export function sortClassifierTables(rows: ClassifierTable[]) {
@@ -67,6 +74,10 @@ export async function getClassifierProcessStages() {
 
 export async function getClassifierSystemTypes() {
   return sortClassifierSystemTypes(await fetchClassifierSystemTypes());
+}
+
+export async function getClassifierServers() {
+  return sortClassifierServers(await fetchClassifierServers());
 }
 
 export async function getClassifierTables() {
@@ -107,6 +118,35 @@ export function buildDepartmentOptions(rows: ClassifierDepartment[], currentValu
 
 export function buildProcessStageOptions(rows: ClassifierProcessStage[], currentValue?: string) {
   const activeOptions = rows.filter((row) => row.active).map((row) => row.name);
+
+  if (currentValue && !activeOptions.includes(currentValue)) {
+    return [currentValue, ...activeOptions];
+  }
+
+  return activeOptions;
+}
+
+export function buildClassifierServerOptions(rows: ClassifierServer[], currentValue?: string) {
+  const activeOptions = rows.filter((row) => row.active).map((row) => row.name);
+
+  if (currentValue && !activeOptions.includes(currentValue)) {
+    return [currentValue, ...activeOptions];
+  }
+
+  return activeOptions;
+}
+
+export function buildClassifierTableOptions(rows: ClassifierTable[], systemName: string, currentValue?: string) {
+  const normalizedSystemName = systemName.trim().toLocaleLowerCase();
+  if (!normalizedSystemName) {
+    return currentValue ? [currentValue] : [];
+  }
+
+  const activeOptions = [...new Set(
+    rows
+      .filter((row) => row.systemType.trim().toLocaleLowerCase() === normalizedSystemName)
+      .map((row) => row.tableName),
+  )].sort((left, right) => left.localeCompare(right, "uz"));
 
   if (currentValue && !activeOptions.includes(currentValue)) {
     return [currentValue, ...activeOptions];
