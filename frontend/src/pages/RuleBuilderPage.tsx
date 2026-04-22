@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { Trash2 } from "lucide-react";
 
@@ -19,16 +20,118 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createControl, fetchControl, updateControl } from "@/lib/api";
-import { controlDetailToRequest, createDefaultControlRequest, type ControlRequest, type ControlRule, type RuleType } from "@/lib/types";
+import { controlDetailToRequest, createDefaultControlRequest, type ControlRequest, type ControlRule, type LocaleCode, type RuleType } from "@/lib/types";
 
 function areCanvasStatesEqual(left: Record<string, unknown>, right: Record<string, unknown>) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export function RuleBuilderPage() {
+  const { i18n } = useTranslation();
   const navigate = useNavigate();
   const params = useParams();
   const controlId = params.id;
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const text = {
+    title: {
+      OZ: "Visual Rule Builder",
+      UZ: "Visual Rule Builder",
+      RU: "Visual Rule Builder",
+      EN: "Visual Rule Builder",
+    },
+    subtitle: {
+      OZ: "Canvas orqali child qoidalarni bog'lang, keyin o'ng panelda ularning atributlarini to'ldiring.",
+      UZ: "Canvas орқали child қоидаларни боғланг, кейин ўнг панелда уларнинг атрибутларини тўлдиринг.",
+      RU: "Связывайте дочерние правила на canvas, затем заполняйте их атрибуты в правой панели.",
+      EN: "Link child rules on the canvas, then fill in their attributes in the right panel.",
+    },
+    openForm: {
+      OZ: "Formani ochish",
+      UZ: "Формани очиш",
+      RU: "Открыть форму",
+      EN: "Open form",
+    },
+    saveBuilder: {
+      OZ: "Builderni saqlash",
+      UZ: "Builderни сақлаш",
+      RU: "Сохранить builder",
+      EN: "Save builder",
+    },
+    saveSuccess: {
+      OZ: "Builder saqlandi",
+      UZ: "Builder сақланди",
+      RU: "Builder сохранен",
+      EN: "Builder saved",
+    },
+    saveError: {
+      OZ: "Builder saqlanmadi",
+      UZ: "Builder сақланмади",
+      RU: "Не удалось сохранить builder",
+      EN: "Failed to save builder",
+    },
+    childRule: {
+      OZ: "Child qoida",
+      UZ: "Child қоида",
+      RU: "Дочернее правило",
+      EN: "Child rule",
+    },
+    remove: {
+      OZ: "O'chirish",
+      UZ: "Ўчириш",
+      RU: "Удалить",
+      EN: "Remove",
+    },
+    ruleName: {
+      OZ: "Qoida nomi",
+      UZ: "Қоида номи",
+      RU: "Название правила",
+      EN: "Rule name",
+    },
+    ruleType: {
+      OZ: "Qoida turi",
+      UZ: "Қоида тури",
+      RU: "Тип правила",
+      EN: "Rule type",
+    },
+    description: {
+      OZ: "Tavsif",
+      UZ: "Тавсиф",
+      RU: "Описание",
+      EN: "Description",
+    },
+    field: {
+      OZ: "Maydon",
+      UZ: "Майдон",
+      RU: "Поле",
+      EN: "Field",
+    },
+    operator: {
+      OZ: "Operator",
+      UZ: "Оператор",
+      RU: "Оператор",
+      EN: "Operator",
+    },
+    value: {
+      OZ: "Qiymat",
+      UZ: "Қиймат",
+      RU: "Значение",
+      EN: "Value",
+    },
+    action: {
+      OZ: "Amal",
+      UZ: "Амал",
+      RU: "Действие",
+      EN: "Action",
+    },
+    message: {
+      OZ: "Xabar",
+      UZ: "Хабар",
+      RU: "Сообщение",
+      EN: "Message",
+    },
+  } as const;
   const detailQuery = useQuery({
     queryKey: ["control", controlId, "builder"],
     queryFn: () => fetchControl(controlId!),
@@ -47,11 +150,11 @@ export function RuleBuilderPage() {
     mutationFn: async (payload: ControlRequest) =>
       controlId ? updateControl(controlId, payload) : createControl(payload),
     onSuccess: (result) => {
-      toast.success("Builder saved");
+      toast.success(text.saveSuccess[currentLocale]);
       navigate(`/controls/${result.id}/builder`, { replace: true });
     },
     onError: () => {
-      toast.error("Builder save failed");
+      toast.error(text.saveError[currentLocale]);
     },
   });
 
@@ -72,15 +175,15 @@ export function RuleBuilderPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Visual Rule Builder"
-        subtitle="Canvas orqali child qoidalarni bog'lang, keyin o'ng panelda ularning atributlarini to'ldiring."
+        title={text.title[currentLocale]}
+        subtitle={text.subtitle[currentLocale]}
         actions={
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => navigate(controlId ? `/controls/${controlId}/edit` : "/controls/new")}>
-              Open form
+              {text.openForm[currentLocale]}
             </Button>
             <Button onClick={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending}>
-              Save builder
+              {text.saveBuilder[currentLocale]}
             </Button>
           </div>
         }
@@ -105,19 +208,19 @@ export function RuleBuilderPage() {
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
                 <CardTitle>{rule.name || `Rule ${index + 1}`}</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">Child qoida #{index + 1}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{text.childRule[currentLocale]} #{index + 1}</p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => removeRule(index)}>
                 <Trash2 className="size-4" />
-                Remove
+                {text.remove[currentLocale]}
               </Button>
             </CardHeader>
             <CardContent className="grid gap-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Rule name">
+                <Field label={text.ruleName[currentLocale]}>
                   <Input value={rule.name} onChange={(event) => updateRule(index, (current) => ({ ...current, name: event.target.value }))} />
                 </Field>
-                <Field label="Rule type">
+                <Field label={text.ruleType[currentLocale]}>
                   <Select value={rule.ruleType} onValueChange={(value) => updateRule(index, (current) => ({ ...current, ruleType: value as RuleType }))}>
                     <SelectTrigger>
                       <SelectValue />
@@ -132,7 +235,7 @@ export function RuleBuilderPage() {
                 </Field>
               </div>
 
-              <Field label="Description">
+              <Field label={text.description[currentLocale]}>
                 <Textarea
                   rows={2}
                   value={rule.description}
@@ -142,7 +245,7 @@ export function RuleBuilderPage() {
 
               {rule.ruleType === "CONDITION" || rule.ruleType === "GROUP" ? (
                 <div className="grid gap-4 md:grid-cols-3">
-                  <Field label="Field">
+                  <Field label={text.field[currentLocale]}>
                     <Input
                       value={String(rule.definition.field ?? "")}
                       onChange={(event) =>
@@ -153,7 +256,7 @@ export function RuleBuilderPage() {
                       }
                     />
                   </Field>
-                  <Field label="Operator">
+                  <Field label={text.operator[currentLocale]}>
                     <Input
                       value={String(rule.definition.operator ?? "")}
                       onChange={(event) =>
@@ -164,7 +267,7 @@ export function RuleBuilderPage() {
                       }
                     />
                   </Field>
-                  <Field label="Value">
+                  <Field label={text.value[currentLocale]}>
                     <Input
                       value={String(rule.definition.value ?? "")}
                       onChange={(event) =>
@@ -178,7 +281,7 @@ export function RuleBuilderPage() {
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Action">
+                  <Field label={text.action[currentLocale]}>
                     <Input
                       value={String(rule.definition.action ?? "")}
                       onChange={(event) =>
@@ -189,7 +292,7 @@ export function RuleBuilderPage() {
                       }
                     />
                   </Field>
-                  <Field label="Message">
+                  <Field label={text.message[currentLocale]}>
                     <Input
                       value={String(rule.definition.message ?? "")}
                       onChange={(event) =>
@@ -224,3 +327,4 @@ function Field({
     </div>
   );
 }
+

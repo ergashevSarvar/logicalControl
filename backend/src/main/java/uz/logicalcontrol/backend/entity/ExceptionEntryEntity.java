@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 @Getter
 @Setter
@@ -16,7 +18,9 @@ import lombok.Setter;
 @AllArgsConstructor
 @Entity
 @Table(name = "exception_entries")
-public class ExceptionEntryEntity extends BaseEntity {
+@SQLDelete(sql = "update exception_entries set isdeleted = 1, deltime = current timestamp, updtime = current timestamp where id = ? and isdeleted = 0")
+@SQLRestriction("isdeleted = 0")
+public class ExceptionEntryEntity extends AuditedUuidEntity {
 
     @Column(nullable = false, length = 80)
     private String exceptionType;

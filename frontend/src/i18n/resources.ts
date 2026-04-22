@@ -1,12 +1,12 @@
 export const resources = {
-  uzLatn: {
+  OZ: {
     translation: {
       appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Bosh sahifa",
         classifiers: "Tasniflagichlar",
         controls: "Mantiqiy nazoratlar",
-        create: "MN yaratish",
+        create: "Yangi yaratish",
         builder: "Visual Rule Builder",
         logs: "Logs va statistika",
       },
@@ -18,7 +18,7 @@ export const resources = {
         cancel: "Bekor qilish",
         edit: "Tahrirlash",
         duplicate: "Nusxalash",
-        status: "Holat",
+        status: "Status",
         type: "Turi",
         system: "Tizim",
         priority: "Prioritet",
@@ -46,9 +46,9 @@ export const resources = {
         recent: "So'nggi faollik",
       },
       controls: {
-        title: "MN katalogi",
+        title: "Mantiqiy nazoratlar katalogi",
         subtitle: "Filtrlash, qidirish, nusxalash va vizual builderga tez o'tish.",
-        add: "Yangi MN",
+        add: "Yangi mantiqiy nazorat",
         duplicate: {
           title: "Nusxalashni tasdiqlaysizmi?",
           message: "{{code}} raqamli ushbu Mantiqiy nazoratni nusxalashni tasdiqlaysizmi?",
@@ -71,8 +71,8 @@ export const resources = {
         },
       },
       editor: {
-        titleCreate: "Yangi MN yaratish",
-        titleEdit: "MNni tahrirlash",
+        titleCreate: "Yangi mantiqiy nazorat yaratish",
+        titleEdit: "Mantiqiy nazoratni tahrirlash",
         subtitle: "Asosiy ma'lumotlar, muddati, xabarlari va qoida oqimini boshqaring.",
         overview: "Asosiy",
         validity: "Muddat va hudud",
@@ -82,7 +82,7 @@ export const resources = {
         steps: {
           overview: {
             title: "Umumiy ma'lumotlar",
-            subtitle: "MN identifikatsiyasi va tasdiqlash holati",
+            subtitle: "Mantiqiy nazorat identifikatsiyasi va tasdiqlash holati",
           },
           validity: {
             title: "Muddat va hudud",
@@ -108,12 +108,12 @@ export const resources = {
           designerHandoff: "Builderga o'tish",
         },
         fields: {
-          code: "MN kodi",
+          code: "Mantiqiy nazorat kodi",
           uniqueNumber: "Unikal raqam",
-          name: "MN nomi",
+          name: "Mantiqiy nazorat nomi",
           objective: "Maqsad",
           systemName: "Tizim nomi",
-          controlType: "MN turi",
+          controlType: "Mantiqiy nazorat turi",
           processStage: "Bosqich",
           authorName: "Muallif",
           responsibleDepartment: "Mas'ul boshqarma",
@@ -135,10 +135,10 @@ export const resources = {
           smsPhones: "Telefonlar",
         },
         messageLabels: {
-          uzCyrl: "O'zbekcha (kiril)",
-          uzLatn: "O'zbekcha (lotin)",
-          ru: "Ruscha",
-          en: "Inglizcha",
+          UZ: "O'zbekcha (kiril)",
+          OZ: "O'zbekcha (lotin)",
+          RU: "Ruscha",
+          EN: "Inglizcha",
         },
         options: {
           warning: "Ogohlantrish",
@@ -153,9 +153,9 @@ export const resources = {
         },
         toggles: {
           conflictTitle: "Ziddiyat monitoringi",
-          conflictDescription: "Bir-biriga zid MNlarni logga chiqarsin.",
+          conflictDescription: "Bir-biriga zid mantiqiy nazoratlarni logga chiqarsin.",
           smsTitle: "SMS xabarnoma",
-          smsDescription: "MN trigger bo'lganda telefonlarga yuborish.",
+          smsDescription: "Mantiqiy nazorat ishga tushganda telefonlarga yuborish.",
         },
         placeholders: {
           approver: "Xodim F.I.Sh",
@@ -168,14 +168,14 @@ export const resources = {
         executionTexts: {
           noDescription: "Hozircha tavsif yo'q.",
           handoffDescription:
-            "Bu forma MNning barcha biznes atributlarini boshqaradi. Vizual oqim, node aloqalari va child qoidalarni chuqur sozlash uchun builder sahifasiga o'ting.",
+            "Bu forma mantiqiy nazoratning barcha biznes atributlarini boshqaradi. Vizual oqim, node aloqalari va child qoidalarni chuqur sozlash uchun builder sahifasiga o'ting.",
           openBuilder: "Visual builderni ochish",
         },
         footer: {
           nextAvailable: "Keyingi qadamga o'tish mumkin",
           nextStep: "Navbatdagi bo'lim",
           lastStep: "Oxirgi qadamdasiz",
-          lastStepDescription: "Ma'lumotlarni tekshirib, MNni saqlang yoki builder sahifasiga o'ting.",
+          lastStepDescription: "Ma'lumotlarni tekshirib, mantiqiy nazoratni saqlang yoki builder sahifasiga o'ting.",
         },
         actions: {
           back: "Ortga",
@@ -185,7 +185,7 @@ export const resources = {
         notifications: {
           created: "Mantiqiy nazorat saqlandi",
           updated: "Mantiqiy nazorat ma'lumotlari yangilandi",
-          saveFailed: "MN saqlanmadi",
+          saveFailed: "Mantiqiy nazorat saqlanmadi",
         },
         validation: {
           required: "Ushbu maydon majburiy",
@@ -215,13 +215,13 @@ export const resources = {
       },
     },
   },
-  uzCyrl: {
+  UZ: {
     translation: {
       appName: "Мантиқий назорат",
       nav: {
         dashboard: "Бош саҳифа",
         controls: "Мантиқий назоратлар",
-        create: "MN яратиш",
+        create: "Янги яратиш",
         builder: "Visual Rule Builder",
         logs: "Логлар ва статистика",
       },
@@ -233,7 +233,7 @@ export const resources = {
         cancel: "Бекор қилиш",
         edit: "Таҳрирлаш",
         duplicate: "Нусхалаш",
-        status: "Ҳолат",
+        status: "Статус",
         type: "Тури",
         system: "Тизим",
         priority: "Приоритет",
@@ -261,9 +261,9 @@ export const resources = {
         recent: "Сўнгги фаоллик",
       },
       controls: {
-        title: "MN каталоги",
+        title: "Мантиқий назоратлар каталоги",
         subtitle: "Фильтрлаш, қидириш, нусхалаш ва визуал builderга тез ўтиш.",
-        add: "Янги MN",
+        add: "Янги мантиқий назорат",
         duplicate: {
           title: "Нусхалашни тасдиқлайсизми?",
           message: "{{code}} рақамли ушбу Мантиқий назоратни нусхалашни тасдиқлайсизми?",
@@ -286,8 +286,8 @@ export const resources = {
         },
       },
       editor: {
-        titleCreate: "Янги MN яратиш",
-        titleEdit: "MNни таҳрирлаш",
+        titleCreate: "Янги мантиқий назорат яратиш",
+        titleEdit: "Мантиқий назоратни таҳрирлаш",
         subtitle: "Асосий маълумотлар, муддати, хабарлари ва қоида оқимини бошқаринг.",
         overview: "Асосий",
         validity: "Муддат ва ҳудуд",
@@ -297,7 +297,7 @@ export const resources = {
         steps: {
           overview: {
             title: "Умумий маълумотлар",
-            subtitle: "MN идентификацияси ва тасдиқлаш ҳолати",
+            subtitle: "Мантиқий назорат идентификацияси ва тасдиқлаш ҳолати",
           },
           validity: {
             title: "Муддат ва ҳудуд",
@@ -323,12 +323,12 @@ export const resources = {
           designerHandoff: "Builderга ўтиш",
         },
         fields: {
-          code: "MN коди",
+          code: "Мантиқий назорат коди",
           uniqueNumber: "Уникал рақам",
-          name: "MN номи",
+          name: "Мантиқий назорат номи",
           objective: "Мақсад",
           systemName: "Тизим номи",
-          controlType: "MN тури",
+          controlType: "Мантиқий назорат тури",
           processStage: "Босқич",
           authorName: "Муаллиф",
           responsibleDepartment: "Масъул бошқарма",
@@ -350,10 +350,10 @@ export const resources = {
           smsPhones: "Телефонлар",
         },
         messageLabels: {
-          uzCyrl: "Ўзбекча (кирил)",
-          uzLatn: "Ўзбекча (лотин)",
-          ru: "Русча",
-          en: "Инглизча",
+          UZ: "Ўзбекча (кирил)",
+          OZ: "Ўзбекча (лотин)",
+          RU: "Русча",
+          EN: "Инглизча",
         },
         options: {
           warning: "Огоҳлантириш",
@@ -368,9 +368,9 @@ export const resources = {
         },
         toggles: {
           conflictTitle: "Зиддият мониторинги",
-          conflictDescription: "Бир-бирига зид MNларни логга чиқарсин.",
+          conflictDescription: "Бир-бирига зид мантиқий назоратларни логга чиқарсин.",
           smsTitle: "SMS хабарнома",
-          smsDescription: "MN trigger бўлганда телефонларга юбориш.",
+          smsDescription: "Мантиқий назорат ишга тушганда телефонларга юбориш.",
         },
         placeholders: {
           approver: "Ходим Ф.И.Ш",
@@ -383,14 +383,14 @@ export const resources = {
         executionTexts: {
           noDescription: "Ҳозирча тавсиф йўқ.",
           handoffDescription:
-            "Бу форма MNнинг барча бизнес атрибутларини бошқаради. Визуал оқим, node алоқалари ва child қоидаларни чуқур созлаш учун builder саҳифасига ўтинг.",
+            "Бу форма мантиқий назоратнинг барча бизнес атрибутларини бошқаради. Визуал оқим, node алоқалари ва child қоидаларни чуқур созлаш учун builder саҳифасига ўтинг.",
           openBuilder: "Visual builderни очиш",
         },
         footer: {
           nextAvailable: "Кейинги қадамга ўтиш мумкин",
           nextStep: "Навбатдаги бўлим",
           lastStep: "Охирги қадамдасиз",
-          lastStepDescription: "Маълумотларни текшириб, MNни сақланг ёки builder саҳифасига ўтинг.",
+          lastStepDescription: "Маълумотларни текшириб, мантиқий назоратни сақланг ёки builder саҳифасига ўтинг.",
         },
         actions: {
           back: "Орқага",
@@ -398,8 +398,8 @@ export const resources = {
           builder: "Builder",
         },
         notifications: {
-          saved: "MN сақланди",
-          saveFailed: "MN сақланмади",
+          saved: "Мантиқий назорат сақланди",
+          saveFailed: "Мантиқий назорат сақланмади",
         },
       },
       builder: {
@@ -414,13 +414,13 @@ export const resources = {
       },
     },
   },
-  ru: {
+  RU: {
     translation: {
       appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Главная",
-        controls: "Список MN",
-        create: "Создать MN",
+        controls: "Логические контроли",
+        create: "Создать новый",
         builder: "Visual Rule Builder",
         logs: "Логи и статистика",
       },
@@ -460,9 +460,9 @@ export const resources = {
         recent: "Последняя активность",
       },
       controls: {
-        title: "Каталог MN",
+        title: "Каталог логических контролей",
         subtitle: "Быстрый поиск, фильтрация, копирование и переход в builder.",
-        add: "Новый MN",
+        add: "Новый логический контроль",
         duplicate: {
           title: "Подтвердить копирование?",
           message: "Подтверждаете копирование логического контроля с номером {{code}}?",
@@ -485,8 +485,8 @@ export const resources = {
         },
       },
       editor: {
-        titleCreate: "Создать новый MN",
-        titleEdit: "Редактирование MN",
+        titleCreate: "Создать новый логический контроль",
+        titleEdit: "Редактирование логического контроля",
         subtitle: "Управляйте реквизитами, сроками, сообщениями и логикой.",
         overview: "Основное",
         validity: "Срок и география",
@@ -496,7 +496,7 @@ export const resources = {
         steps: {
           overview: {
             title: "Общие данные",
-            subtitle: "Идентификация MN и состояние согласования",
+            subtitle: "Идентификация логического контроля и состояние согласования",
           },
           validity: {
             title: "Срок и география",
@@ -522,12 +522,12 @@ export const resources = {
           designerHandoff: "Переход в builder",
         },
         fields: {
-          code: "Код MN",
+          code: "Код логического контроля",
           uniqueNumber: "Уникальный номер",
-          name: "Название MN",
+          name: "Название логического контроля",
           objective: "Цель",
           systemName: "Название системы",
-          controlType: "Тип MN",
+          controlType: "Тип логического контроля",
           processStage: "Этап",
           authorName: "Автор",
           responsibleDepartment: "Ответственное управление",
@@ -549,10 +549,10 @@ export const resources = {
           smsPhones: "Телефоны",
         },
         messageLabels: {
-          uzCyrl: "Узбекский (кир.)",
-          uzLatn: "Узбекский (лат.)",
-          ru: "Русский",
-          en: "Английский",
+          UZ: "Узбекский (кир.)",
+          OZ: "Узбекский (лат.)",
+          RU: "Русский",
+          EN: "Английский",
         },
         options: {
           warning: "Предупреждение",
@@ -567,9 +567,9 @@ export const resources = {
         },
         toggles: {
           conflictTitle: "Мониторинг конфликтов",
-          conflictDescription: "Логировать MN, которые противоречат друг другу.",
+          conflictDescription: "Логировать логические контроли, которые противоречат друг другу.",
           smsTitle: "SMS-уведомление",
-          smsDescription: "Отправлять на телефоны при срабатывании MN.",
+          smsDescription: "Отправлять на телефоны при срабатывании логического контроля.",
         },
         placeholders: {
           approver: "Ф.И.О. сотрудника",
@@ -582,14 +582,14 @@ export const resources = {
         executionTexts: {
           noDescription: "Пока нет описания.",
           handoffDescription:
-            "Эта форма управляет всеми бизнес-атрибутами MN. Для глубокой настройки визуального потока, связей node и дочерних правил перейдите на страницу builder.",
+            "Эта форма управляет всеми бизнес-атрибутами логического контроля. Для глубокой настройки визуального потока, связей node и дочерних правил перейдите на страницу builder.",
           openBuilder: "Открыть visual builder",
         },
         footer: {
           nextAvailable: "Можно перейти к следующему шагу",
           nextStep: "Следующий раздел",
           lastStep: "Вы на последнем шаге",
-          lastStepDescription: "Проверьте данные, сохраните MN или перейдите на страницу builder.",
+          lastStepDescription: "Проверьте данные, сохраните логический контроль или перейдите на страницу builder.",
         },
         actions: {
           back: "Назад",
@@ -597,8 +597,8 @@ export const resources = {
           builder: "Builder",
         },
         notifications: {
-          saved: "MN сохранён",
-          saveFailed: "MN не удалось сохранить",
+          saved: "Логический контроль сохранён",
+          saveFailed: "Не удалось сохранить логический контроль",
         },
       },
       builder: {
@@ -613,14 +613,14 @@ export const resources = {
       },
     },
   },
-  en: {
+  EN: {
     translation: {
       appName: "Mantiqiy nazorat",
       nav: {
         dashboard: "Dashboard",
         classifiers: "Classifiers",
-        controls: "MN List",
-        create: "Create MN",
+        controls: "Logical Controls",
+        create: "Create new",
         builder: "Visual Rule Builder",
         logs: "Logs & stats",
       },
@@ -660,9 +660,9 @@ export const resources = {
         recent: "Recent activity",
       },
       controls: {
-        title: "MN catalog",
+        title: "Logical Control Catalog",
         subtitle: "Search, filter, duplicate, and jump into the visual builder.",
-        add: "New MN",
+        add: "New Logical Control",
         duplicate: {
           title: "Confirm duplication?",
           message: "Do you confirm duplicating this logical control with number {{code}}?",
@@ -685,8 +685,8 @@ export const resources = {
         },
       },
       editor: {
-        titleCreate: "Create a new MN",
-        titleEdit: "Edit MN",
+        titleCreate: "Create a new logical control",
+        titleEdit: "Edit logical control",
         subtitle: "Manage identity, validity, messages, and rule flow.",
         overview: "Overview",
         validity: "Validity & scope",
@@ -696,7 +696,7 @@ export const resources = {
         steps: {
           overview: {
             title: "General information",
-            subtitle: "MN identity and approval state",
+            subtitle: "Logical control identity and approval state",
           },
           validity: {
             title: "Validity and scope",
@@ -722,12 +722,12 @@ export const resources = {
           designerHandoff: "Builder handoff",
         },
         fields: {
-          code: "MN code",
+          code: "Logical control code",
           uniqueNumber: "Unique number",
-          name: "MN name",
+          name: "Logical control name",
           objective: "Objective",
           systemName: "System name",
-          controlType: "MN type",
+          controlType: "Logical control type",
           processStage: "Stage",
           authorName: "Author",
           responsibleDepartment: "Responsible department",
@@ -749,10 +749,10 @@ export const resources = {
           smsPhones: "Phone numbers",
         },
         messageLabels: {
-          uzCyrl: "Uzbek Cyrillic",
-          uzLatn: "Uzbek Latin",
-          ru: "Russian",
-          en: "English",
+          UZ: "Uzbek Cyrillic",
+          OZ: "Uzbek Latin",
+          RU: "Russian",
+          EN: "English",
         },
         options: {
           warning: "Warning",
@@ -767,9 +767,9 @@ export const resources = {
         },
         toggles: {
           conflictTitle: "Conflict monitoring",
-          conflictDescription: "Log MNs that contradict each other.",
+          conflictDescription: "Log logical controls that contradict each other.",
           smsTitle: "SMS notification",
-          smsDescription: "Send to phone numbers when the MN is triggered.",
+          smsDescription: "Send to phone numbers when the logical control is triggered.",
         },
         placeholders: {
           approver: "Employee full name",
@@ -782,14 +782,14 @@ export const resources = {
         executionTexts: {
           noDescription: "No description yet.",
           handoffDescription:
-            "This form manages all business attributes of the MN. For deeper visual flow, node connections, and child rule setup, open the builder page.",
+            "This form manages all business attributes of the logical control. For deeper visual flow, node connections, and child rule setup, open the builder page.",
           openBuilder: "Open visual builder",
         },
         footer: {
           nextAvailable: "You can move to the next step",
           nextStep: "Next section",
           lastStep: "You are on the final step",
-          lastStepDescription: "Review the data, save the MN, or open the builder page.",
+          lastStepDescription: "Review the data, save the logical control, or open the builder page.",
         },
         actions: {
           back: "Back",
@@ -799,7 +799,7 @@ export const resources = {
         notifications: {
           created: "Logical control saved",
           updated: "Logical control details updated",
-          saveFailed: "Failed to save MN",
+          saveFailed: "Failed to save logical control",
         },
         validation: {
           required: "This field is required",
@@ -830,3 +830,4 @@ export const resources = {
     },
   },
 } as const;
+

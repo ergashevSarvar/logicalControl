@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class SqlQueryRunnerProperties {
 
     private boolean enabled = true;
-    private int maxResultRows = 1000;
+  private int maxResultRows = 1_000;
     private int queryTimeoutSeconds = 120;
     private int historyTtlMinutes = 15;
     private final Etranzit etranzit = new Etranzit();

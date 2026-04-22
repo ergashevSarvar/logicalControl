@@ -8,6 +8,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 @Getter
 @Setter
@@ -16,7 +18,9 @@ import lombok.Setter;
 @AllArgsConstructor
 @Entity
 @Table(name = "roles")
-public class RoleEntity extends BaseEntity {
+@SQLDelete(sql = "update roles set isdeleted = 1, deltime = current timestamp, updtime = current timestamp where id = ? and isdeleted = 0")
+@SQLRestriction("isdeleted = 0")
+public class RoleEntity extends AuditedUuidEntity {
 
     @Column(nullable = false, unique = true, length = 50)
     private String code;

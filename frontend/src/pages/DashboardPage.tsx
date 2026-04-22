@@ -9,6 +9,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   CartesianGrid,
   Line,
@@ -21,6 +22,7 @@ import {
 
 import { ResultBadge, SystemBadge } from "@/components/common/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { LocaleCode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const overviewCards = [
@@ -230,15 +232,74 @@ const heatmapLevels: Record<number, string> = {
 };
 
 export function DashboardPage() {
+  const { i18n } = useTranslation();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const dashboardText = {
+    overview: {
+      all: {
+        title: { OZ: "Jami MN", UZ: "Жами МН", RU: "Всего ЛК", EN: "Total controls" },
+        helper: {
+          OZ: "Barcha tizimlar bo'yicha faol va passiv oqimlar",
+          UZ: "Барча тизимлар бўйича фаол ва пассив оқимлар",
+          RU: "Активные и пассивные потоки по всем системам",
+          EN: "Active and passive flows across all systems",
+        },
+      },
+      active: {
+        title: { OZ: "Faol MN", UZ: "Фаол МН", RU: "Активные ЛК", EN: "Active controls" },
+        helper: { OZ: "Hozir ishlayotgan nazoratlar soni", UZ: "Ҳозир ишлаётган назоратлар сони", RU: "Количество действующих контролей", EN: "Number of currently active controls" },
+      },
+      daily: {
+        title: { OZ: "Bugungi trigger", UZ: "Бугунги триггер", RU: "Триггеры за сегодня", EN: "Today's triggers" },
+        helper: { OZ: "So'nggi 24 soatda qayd etilgan ishga tushishlar", UZ: "Сўнгги 24 соатда қайд этилган ишга тушишлар", RU: "Срабатывания за последние 24 часа", EN: "Executions recorded in the last 24 hours" },
+      },
+      latency: {
+        title: { OZ: "O'rtacha vaqt", UZ: "Ўртача вақт", RU: "Среднее время", EN: "Average time" },
+        helper: { OZ: "Mantiqiy nazoratning o'rtacha javob vaqti", UZ: "Мантиқий назоратнинг ўртача жавоб вақти", RU: "Среднее время отклика логического контроля", EN: "Average logical control response time" },
+      },
+    },
+    analyticsTitle: { OZ: "AT / EK / RW / EC ishlash dinamikasi", UZ: "AT / EK / RW / EC ишлаш динамикаси", RU: "Динамика работы AT / EK / RW / EC", EN: "AT / EK / RW / EC performance dynamics" },
+    analyticsDescription: { OZ: "Tizimlar kesimida mantiqiy nazoratlarning ishga tushish trayektoriyasi.", UZ: "Тизимлар кесимида мантиқий назоратларнинг ишга тушиш траекторияси.", RU: "Траектория срабатываний логических контролей по системам.", EN: "Execution trajectory of logical controls across systems." },
+    yearlyMonitoring: { OZ: "Yillik monitoring", UZ: "Йиллик мониторинг", RU: "Годовой мониторинг", EN: "Annual monitoring" },
+    lineDescriptions: {
+      AT: { OZ: "AT tizimidagi triggerlar oqimi", UZ: "AT тизимидаги триггерлар оқими", RU: "Поток триггеров в системе AT", EN: "Trigger flow in AT system" },
+      EK: { OZ: "EK tizimidagi triggerlar oqimi", UZ: "EK тизимидаги триггерлар оқими", RU: "Поток триггеров в системе EK", EN: "Trigger flow in EK system" },
+      RW: { OZ: "RW tizimidagi triggerlar oqimi", UZ: "RW тизимидаги триггерлар оқими", RU: "Поток триггеров в системе RW", EN: "Trigger flow in RW system" },
+      EC: { OZ: "EC tizimidagi triggerlar oqimi", UZ: "EC тизимидаги триггерлар оқими", RU: "Поток триггеров в системе EC", EN: "Trigger flow in EC system" },
+    },
+    heatmapTitle: { OZ: "Faollik xaritasi", UZ: "Фаоллик харитаси", RU: "Карта активности", EN: "Activity heatmap" },
+    heatmapSummary: { OZ: "ta ishga tushish oxirgi 12 oyda", UZ: "та ишга тушиш охирги 12 ойда", RU: "срабатываний за последние 12 месяцев", EN: "executions in the last 12 months" },
+    heatmapDescription: { OZ: "Har bir katak bir kunni bildiradi. Ishga tushish qancha ko'p bo'lsa, rang shuncha to'q ko'rinadi.", UZ: "Ҳар бир катак бир кунни билдиради. Ишга тушиш қанча кўп бўлса, ранг шунча тўқ кўринади.", RU: "Каждая ячейка обозначает один день. Чем больше срабатываний, тем насыщеннее цвет.", EN: "Each cell represents a day. The more executions, the deeper the color." },
+    heatmapDensity: { OZ: "Kunlik MN zichligi", UZ: "Кунлик МН зичлиги", RU: "Дневная плотность ЛК", EN: "Daily control density" },
+    heatmapMonthsNote: { OZ: "Oylar alohida bloklarda ko'rsatilgan. Har bir katak bitta kunga teng.", UZ: "Ойлар алоҳида блокларда кўрсатилган. Ҳар бир катак битта кунга тенг.", RU: "Месяцы показаны отдельными блоками. Каждая ячейка соответствует одному дню.", EN: "Months are shown in separate blocks. Each cell represents one day." },
+    maxDaily: { OZ: "Eng yuqori kunlik qiymat:", UZ: "Энг юқори кунлик қиймат:", RU: "Максимальное дневное значение:", EN: "Highest daily value:" },
+    triggersSuffix: { OZ: "ta trigger", UZ: "та триггер", RU: "триггеров", EN: "triggers" },
+    low: { OZ: "Kam", UZ: "Кам", RU: "Меньше", EN: "Low" },
+    high: { OZ: "Ko'p", UZ: "Кўп", RU: "Больше", EN: "High" },
+    systemsTitle: { OZ: "Tizimlar kesimida MN soni", UZ: "Тизимлар кесимида МН сони", RU: "Количество ЛК по системам", EN: "Control count by system" },
+    systemsDescription: { OZ: "Har bir tizim ichida hozir mavjud bo'lgan mantiqiy nazoratlar.", UZ: "Ҳар бир тизим ичида ҳозир мавжуд бўлган мантиқий назоратлар.", RU: "Логические контроли, доступные сейчас внутри каждой системы.", EN: "Logical controls currently available inside each system." },
+    recentTitle: { OZ: "Oxirgi ishlagan MNlar", UZ: "Охирги ишлаган МНлар", RU: "Последние сработавшие ЛК", EN: "Recently executed controls" },
+    recentDescription: { OZ: "So'nggi trigger qaydlarining qisqa ro'yxati", UZ: "Сўнгги триггер қайдларининг қисқа рўйхати", RU: "Краткий список последних срабатываний", EN: "Short list of recent trigger records" },
+    workedSuffix: { OZ: "marta ishlagan", UZ: "марта ишлаган", RU: "раз сработал", EN: "times executed" },
+    recentNames: {
+      "MN-AT-014": { OZ: "Ruxsatnoma muddati bo'yicha nazorat", UZ: "Рухсатнома муддати бўйича назорат", RU: "Контроль срока разрешения", EN: "Permit expiry control" },
+      "MN-EK-021": { OZ: "Risk toifasi bo'yicha ogohlantirish", UZ: "Риск тоифаси бўйича огоҳлантириш", RU: "Предупреждение по категории риска", EN: "Risk category alert" },
+      "MN-RW-009": { OZ: "Transport vositasi mosligi tekshiruvi", UZ: "Транспорт воситаси мослиги текшируви", RU: "Проверка соответствия транспорта", EN: "Transport compliance check" },
+      "MN-EC-031": { OZ: "Qabul qiluvchi istisnolari nazorati", UZ: "Қабул қилувчи истиснолари назорати", RU: "Контроль исключений получателя", EN: "Receiver exceptions control" },
+      "MN-AT-033": { OZ: "Avtomatik bekor bo'lish muddati tekshiruvi", UZ: "Автоматик бекор бўлиш муддати текшируви", RU: "Проверка срока автоотмены", EN: "Auto-cancel period check" },
+    },
+  } as const;
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {overviewCards.map((card) => (
           <OverviewCard
             key={card.key}
-            title={card.title}
+            title={dashboardText.overview[card.key].title[currentLocale]}
             value={card.value}
-            helper={card.helper}
+            helper={dashboardText.overview[card.key].helper[currentLocale]}
             delta={card.delta}
             icon={card.icon}
           />
@@ -251,14 +312,14 @@ export function DashboardPage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.26em] text-primary/70">Analytics</p>
-                <CardTitle className="mt-2 text-2xl">AT / EK / RW / EC ishlash dinamikasi</CardTitle>
+                <CardTitle className="mt-2 text-2xl">{dashboardText.analyticsTitle[currentLocale]}</CardTitle>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Tizimlar kesimida mantiqiy nazoratlarning ishga tushish trayektoriyasi.
+                  {dashboardText.analyticsDescription[currentLocale]}
                 </p>
               </div>
               <div className="flex items-center gap-2 rounded-[18px] border border-border/70 bg-background/80 px-3 py-2 shadow-sm">
                 <GitBranch className="size-4 text-primary" />
-                <span className="text-sm font-medium text-foreground">Yillik monitoring</span>
+                <span className="text-sm font-medium text-foreground">{dashboardText.yearlyMonitoring[currentLocale]}</span>
               </div>
             </div>
           </CardHeader>
@@ -313,7 +374,7 @@ export function DashboardPage() {
                     <span className="h-[3px] w-10 rounded-full" style={{ backgroundColor: line.color }} />
                     <span className="text-sm font-semibold text-foreground">{line.label}</span>
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{line.description}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{dashboardText.lineDescriptions[line.key][currentLocale]}</p>
                 </div>
               ))}
             </div>
@@ -321,17 +382,17 @@ export function DashboardPage() {
             <div className="rounded-[26px] border border-border/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(248,250,255,0.84))] p-4 shadow-[0_18px_34px_-30px_rgba(15,23,42,0.2)] dark:bg-[linear-gradient(180deg,rgba(28,34,46,0.9),rgba(22,28,38,0.78))]">
               <div className="flex flex-col gap-3 border-b border-border/55 pb-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <p className="text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-primary/70">Faollik xaritasi</p>
+                  <p className="text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-primary/70">{dashboardText.heatmapTitle[currentLocale]}</p>
                   <p className="mt-2 text-lg font-semibold text-foreground">
-                    {heatmapData.total.toLocaleString("en-US")} ta ishga tushish oxirgi 12 oyda
+                    {heatmapData.total.toLocaleString("en-US")} {dashboardText.heatmapSummary[currentLocale]}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Har bir katak bir kunni bildiradi. Ishga tushish qancha ko'p bo'lsa, rang shuncha to'q ko'rinadi.
+                    {dashboardText.heatmapDescription[currentLocale]}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 rounded-[16px] border border-border/65 bg-background/80 px-3 py-2 shadow-sm">
                   <Flame className="size-4 text-primary" />
-                  <span className="text-sm font-medium text-foreground">Kunlik MN zichligi</span>
+                  <span className="text-sm font-medium text-foreground">{dashboardText.heatmapDensity[currentLocale]}</span>
                 </div>
               </div>
 
@@ -374,17 +435,17 @@ export function DashboardPage() {
               </div>
 
               <div className="mt-3 rounded-[18px] border border-border/60 bg-background/55 px-3 py-2 text-xs text-muted-foreground">
-                Oylar alohida bloklarda ko'rsatilgan. Har bir katak bitta kunga teng.
+                {dashboardText.heatmapMonthsNote[currentLocale]}
               </div>
 
               <div className="mt-4 flex flex-col gap-3 border-t border-border/55 pt-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Grip className="size-4 text-primary/80" />
-                  <span>Eng yuqori kunlik qiymat: {heatmapData.maxValue.toLocaleString("en-US")} ta trigger</span>
+                  <span>{dashboardText.maxDaily[currentLocale]} {heatmapData.maxValue.toLocaleString("en-US")} {dashboardText.triggersSuffix[currentLocale]}</span>
                 </div>
 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>Kam</span>
+                  <span>{dashboardText.low[currentLocale]}</span>
                   <div className="flex items-center gap-1">
                     {heatmapLegend.map((level) => (
                       <span
@@ -393,7 +454,7 @@ export function DashboardPage() {
                       />
                     ))}
                   </div>
-                  <span>Ko'p</span>
+                  <span>{dashboardText.high[currentLocale]}</span>
                 </div>
               </div>
             </div>
@@ -403,9 +464,9 @@ export function DashboardPage() {
         <div className="grid gap-6">
           <Card className="border-border/70 bg-card/94 shadow-[0_24px_54px_-36px_rgba(15,23,42,0.28)]">
             <CardHeader>
-              <CardTitle>Tizimlar kesimida MN soni</CardTitle>
+              <CardTitle>{dashboardText.systemsTitle[currentLocale]}</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Har bir tizim ichida hozir mavjud bo'lgan mantiqiy nazoratlar.
+                {dashboardText.systemsDescription[currentLocale]}
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -433,8 +494,8 @@ export function DashboardPage() {
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <CardTitle>Oxirgi ishlagan MNlar</CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">So'nggi trigger qaydlarining qisqa ro'yxati</p>
+                  <CardTitle>{dashboardText.recentTitle[currentLocale]}</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">{dashboardText.recentDescription[currentLocale]}</p>
                 </div>
                 <Sparkles className="size-4 text-primary" />
               </div>
@@ -448,7 +509,7 @@ export function DashboardPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{item.code}</p>
-                      <p className="line-clamp-2 text-sm font-semibold text-foreground">{item.name}</p>
+                      <p className="line-clamp-2 text-sm font-semibold text-foreground">{dashboardText.recentNames[item.code][currentLocale]}</p>
                     </div>
                     <ResultBadge result={item.result} />
                   </div>
@@ -457,7 +518,7 @@ export function DashboardPage() {
                     <span className="text-sm text-muted-foreground">{item.when}</span>
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">{item.count}</span> marta ishlagan
+                    <span className="font-semibold text-foreground">{item.count}</span> {dashboardText.workedSuffix[currentLocale]}
                   </p>
                 </div>
               ))}
@@ -506,3 +567,4 @@ function OverviewCard({
     </Card>
   );
 }
+

@@ -52,6 +52,7 @@ public final class ControlDtos {
         String basisFileBase64,
         Boolean basisFileRemoved,
         String systemName,
+        List<String> approverDepartmentIds,
         LocalDate startDate,
         LocalDate finishDate,
         LogicalControlEntity.ControlType controlType,
@@ -77,6 +78,7 @@ public final class ControlDtos {
         Boolean basisFileRemoved,
         @NotBlank String systemName,
         List<String> approvers,
+        List<String> approverDepartmentIds,
         LocalDate startDate,
         LocalDate finishDate,
         String uniqueNumber,
@@ -112,6 +114,8 @@ public final class ControlDtos {
         String code,
         String uniqueNumber,
         String name,
+        String currentStateCode,
+        String currentStateName,
         String systemName,
         LogicalControlEntity.DeploymentScope deploymentScope,
         LogicalControlEntity.DirectionType directionType,
@@ -135,6 +139,16 @@ public final class ControlDtos {
         String action,
         Instant changedAt,
         Map<String, Object> details
+    ) {
+    }
+
+    public record FieldChangeItem(
+        UUID id,
+        String actor,
+        Instant changedAt,
+        String fieldPath,
+        String oldValue,
+        String newValue
     ) {
     }
 
@@ -165,6 +179,7 @@ public final class ControlDtos {
         boolean hasBasisFile,
         String systemName,
         List<String> approvers,
+        List<String> approverDepartmentIds,
         LocalDate startDate,
         LocalDate finishDate,
         String uniqueNumber,
@@ -173,6 +188,8 @@ public final class ControlDtos {
         String authorName,
         String responsibleDepartment,
         LogicalControlEntity.ControlStatus status,
+        String currentStateCode,
+        String currentStateName,
         LocalDateTime suspendedUntil,
         Map<String, String> messages,
         String phoneExtension,
@@ -194,6 +211,7 @@ public final class ControlDtos {
         List<RuleItem> rules,
         List<ExecutionLogItem> recentLogs,
         List<ChangeLogItem> changeLogs,
+        List<FieldChangeItem> fieldChangeLogs,
         Instant createdAt,
         Instant updatedAt
     ) {

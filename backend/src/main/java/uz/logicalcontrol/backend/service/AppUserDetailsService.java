@@ -1,12 +1,13 @@
 package uz.logicalcontrol.backend.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import uz.logicalcontrol.backend.repository.UserRepository;
+import uz.logicalcontrol.backend.security.AppUserPrincipal;
 
 @Service
 @RequiredArgsConstructor
@@ -20,13 +21,17 @@ public class AppUserDetailsService implements UserDetailsService {
             .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         var authorities = user.getRoles().stream()
-            .map(role -> "ROLE_" + role.getCode())
+            .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getCode()))
             .toList();
 
-        return User.withUsername(user.getUsername())
-            .password(user.getPasswordHash())
-            .disabled(!user.isEnabled())
-            .authorities(authorities.toArray(String[]::new))
-            .build();
+        return new AppUserPrincipal(
+            user.getId(),
+            user.getUsername(),
+            user.getPasswordHash(),
+            user.getFullName(),
+            user.getLocale(),
+            user.isEnabled(),
+            authorities
+        );
     }
 }

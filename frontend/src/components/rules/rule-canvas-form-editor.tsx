@@ -77,10 +77,10 @@ type AutocompleteOption = {
 
 const PRIMARY_CONDITION_NODE_ID = "root-primary-condition";
 const notifyLocaleFields: Array<{ key: LocaleCode; label: string }> = [
-  { key: "uzCyrl", label: "O'zbekcha (kiril)" },
-  { key: "uzLatn", label: "O'zbekcha (lotin)" },
-  { key: "ru", label: "Русский" },
-  { key: "en", label: "English" },
+  { key: "UZ", label: "O'zbekcha (kiril)" },
+  { key: "OZ", label: "O'zbekcha (lotin)" },
+  { key: "RU", label: "Русский" },
+  { key: "EN", label: "English" },
 ];
 
 const logicalOptions: Array<{ value: ClauseJoiner; label: string }> = [
@@ -152,10 +152,10 @@ function createUniqueId(prefix = "id") {
 
 function createEmptyNotifyMessages(): Record<LocaleCode, string> {
   return {
-    uzCyrl: "",
-    uzLatn: "",
-    ru: "",
-    en: "",
+    UZ: "",
+    OZ: "",
+    RU: "",
+    EN: "",
   };
 }
 
@@ -163,10 +163,10 @@ function normalizeNotifyMessages(source: unknown) {
   const raw = typeof source === "object" && source !== null ? (source as Record<string, unknown>) : {};
 
   return {
-    uzCyrl: String(raw.uzCyrl ?? ""),
-    uzLatn: String(raw.uzLatn ?? ""),
-    ru: String(raw.ru ?? ""),
-    en: String(raw.en ?? ""),
+    UZ: String(raw.UZ ?? raw.uzCyrl ?? ""),
+    OZ: String(raw.OZ ?? raw.uzLatn ?? ""),
+    RU: String(raw.RU ?? raw.ru ?? ""),
+    EN: String(raw.EN ?? raw.en ?? ""),
   } satisfies Record<LocaleCode, string>;
 }
 
@@ -1198,3 +1198,5 @@ export function RuleCanvasFormEditor({
     </div>
   );
 }
+
+

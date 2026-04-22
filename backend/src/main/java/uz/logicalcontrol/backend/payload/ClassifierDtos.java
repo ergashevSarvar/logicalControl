@@ -80,6 +80,40 @@ public final class ClassifierDtos {
     ) {
     }
 
+    public record RoleRequest(
+        @NotBlank String name,
+        Boolean active
+    ) {
+    }
+
+    public record RoleItem(
+        UUID id,
+        String name,
+        boolean active,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+    }
+
+    public record StateRequest(
+        @NotBlank String code,
+        @NotBlank String name,
+        @NotBlank String lang,
+        Boolean active
+    ) {
+    }
+
+    public record StateItem(
+        UUID id,
+        String code,
+        String name,
+        String lang,
+        boolean active,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+    }
+
     public record TableColumnRequest(
         UUID id,
         @NotBlank String name,

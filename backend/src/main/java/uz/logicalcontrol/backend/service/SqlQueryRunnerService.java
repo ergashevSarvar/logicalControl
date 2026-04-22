@@ -28,6 +28,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import uz.logicalcontrol.backend.config.SqlQueryRunnerProperties;
 import uz.logicalcontrol.backend.payload.SqlRunnerDtos;
+import uz.logicalcontrol.backend.security.SecurityActorResolver;
 
 @Service
 public class SqlQueryRunnerService {
@@ -45,12 +46,14 @@ public class SqlQueryRunnerService {
     );
 
     private final SqlQueryRunnerProperties properties;
+    private final SecurityActorResolver securityActorResolver;
     private final ConcurrentMap<UUID, QueryExecutionHandle> executions = new ConcurrentHashMap<>();
     private final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
     private volatile HikariDataSource etranzitSqlRunnerDataSource;
 
-    public SqlQueryRunnerService(SqlQueryRunnerProperties properties) {
+    public SqlQueryRunnerService(SqlQueryRunnerProperties properties, SecurityActorResolver securityActorResolver) {
         this.properties = properties;
+        this.securityActorResolver = securityActorResolver;
     }
 
     public SqlRunnerDtos.QueryExecutionStartResponse startExecution(
@@ -167,9 +170,7 @@ public class SqlQueryRunnerService {
                     ),
                     rows.isEmpty()
                         ? "Natija topilmadi"
-                        : truncated
-                            ? "Natija cheklangan hajmda yuklandi"
-                            : "Natija muvaffaqiyatli yuklandi"
+                        : "Natija muvaffaqiyatli yuklandi"
                 );
             }
         } catch (SQLException exception) {
@@ -315,11 +316,7 @@ public class SqlQueryRunnerService {
     }
 
     private String resolveActor(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
-            return "anonymous";
-        }
-
-        return authentication.getName();
+        return securityActorResolver.resolveActorId(authentication, "anonymous");
     }
 
     private String extractSqlErrorMessage(SQLException exception) {

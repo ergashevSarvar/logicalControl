@@ -5,7 +5,10 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Lob;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
@@ -19,8 +22,11 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+import uz.logicalcontrol.backend.persistence.converter.ObjectMapJsonConverter;
+import uz.logicalcontrol.backend.persistence.converter.StringListJsonConverter;
+import uz.logicalcontrol.backend.persistence.converter.StringMapJsonConverter;
 
 @Getter
 @Setter
@@ -29,7 +35,9 @@ import org.hibernate.type.SqlTypes;
 @AllArgsConstructor
 @Entity
 @Table(name = "logical_controls")
-public class LogicalControlEntity extends BaseEntity {
+@SQLDelete(sql = "update logical_controls set isdeleted = 1, deltime = current timestamp, updtime = current timestamp where id = ? and isdeleted = 0")
+@SQLRestriction("isdeleted = 0")
+public class LogicalControlEntity extends AuditedUuidEntity {
 
     public enum ControlType {
         WARNING,
@@ -57,19 +65,19 @@ public class LogicalControlEntity extends BaseEntity {
     @Column(nullable = false, unique = true, length = 40)
     private String code;
 
-    @Column(nullable = false, length = 200)
+    @Column(nullable = false, length = 200, columnDefinition = "VARCHAR(200) CCSID 1208")
     private String name;
 
-    @Column(length = 2000)
+    @Column(length = 2000, columnDefinition = "VARCHAR(2000) CCSID 1208")
     private String objective;
 
-    @Column(length = 2000)
+    @Column(length = 2000, columnDefinition = "VARCHAR(2000) CCSID 1208")
     private String basis;
 
     @Column(name = "table_name", length = 255)
     private String tableName;
 
-    @Column(length = 255)
+    @Column(length = 255, columnDefinition = "VARCHAR(255) CCSID 1208")
     private String basisFileName;
 
     @Column(length = 120)
@@ -77,15 +85,16 @@ public class LogicalControlEntity extends BaseEntity {
 
     private Long basisFileSize;
 
-    @JdbcTypeCode(SqlTypes.VARBINARY)
-    @Column(name = "basis_file_data", columnDefinition = "bytea")
+    @Lob
+    @Column(name = "basis_file_data")
     private byte[] basisFileData;
 
-    @Column(nullable = false, length = 160)
+    @Column(nullable = false, length = 160, columnDefinition = "VARCHAR(160) CCSID 1208")
     private String systemName;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Lob
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(nullable = false, columnDefinition = "CLOB(1048576) CCSID 1208")
     @lombok.Builder.Default
     private List<String> approvers = new ArrayList<>();
 
@@ -100,23 +109,33 @@ public class LogicalControlEntity extends BaseEntity {
     @Column(nullable = false, length = 20)
     private ControlType controlType;
 
-    @Column(nullable = false, length = 120)
+    @Column(nullable = false, length = 120, columnDefinition = "VARCHAR(120) CCSID 1208")
     private String processStage;
 
-    @Column(nullable = false, length = 140)
+    @Column(nullable = false, length = 140, columnDefinition = "VARCHAR(140) CCSID 1208")
     private String authorName;
 
-    @Column(nullable = false, length = 160)
+    @Column(nullable = false, length = 160, columnDefinition = "VARCHAR(160) CCSID 1208")
     private String responsibleDepartment;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ControlStatus status;
 
+    @Column(name = "current_state_code", length = 80)
+    private String currentStateCode;
+
+    @Column(name = "current_state_name", length = 320, columnDefinition = "VARCHAR(320) CCSID 1208")
+    private String currentStateName;
+
+    @Column(name = "current_state_lang", length = 20)
+    private String currentStateLang;
+
     private LocalDateTime suspendedUntil;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Lob
+    @Convert(converter = StringMapJsonConverter.class)
+    @Column(nullable = false, columnDefinition = "CLOB(1048576) CCSID 1208")
     @lombok.Builder.Default
     private Map<String, String> messages = new LinkedHashMap<>();
 
@@ -132,8 +151,9 @@ public class LogicalControlEntity extends BaseEntity {
     @lombok.Builder.Default
     private boolean smsNotificationEnabled = false;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Lob
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(nullable = false)
     @lombok.Builder.Default
     private List<String> smsPhones = new ArrayList<>();
 
@@ -153,13 +173,15 @@ public class LogicalControlEntity extends BaseEntity {
 
     private Long lastExecutionDurationMs;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Lob
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(nullable = false)
     @lombok.Builder.Default
     private List<String> territories = new ArrayList<>();
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Lob
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(nullable = false)
     @lombok.Builder.Default
     private List<String> posts = new ArrayList<>();
 
@@ -169,10 +191,13 @@ public class LogicalControlEntity extends BaseEntity {
     @lombok.Builder.Default
     private boolean conflictMonitoringEnabled = true;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.CHAR)
+    @Column(length = 36)
     private UUID copiedFromControlId;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Lob
+    @Convert(converter = ObjectMapJsonConverter.class)
+    @Column(nullable = false)
     @lombok.Builder.Default
     private Map<String, Object> ruleBuilderCanvas = new LinkedHashMap<>();
 
@@ -180,4 +205,25 @@ public class LogicalControlEntity extends BaseEntity {
     @OrderBy("sortOrder ASC")
     @lombok.Builder.Default
     private List<LogicalRuleEntity> rules = new ArrayList<>();
+
+    @OneToMany(mappedBy = "control", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC")
+    @lombok.Builder.Default
+    private List<LogicalControlConditionEntity> conditions = new ArrayList<>();
+
+    @OneToMany(mappedBy = "control", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC")
+    @lombok.Builder.Default
+    private List<LogicalControlApproverDepartmentEntity> approverDepartments = new ArrayList<>();
+
+    @OneToMany(mappedBy = "control", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("insTime DESC")
+    @lombok.Builder.Default
+    private List<LogicalControlStateHistoryEntity> stateHistory = new ArrayList<>();
+
+    @OneToOne(mappedBy = "control", cascade = CascadeType.ALL, orphanRemoval = true)
+    private LogicalControlVerificationConfigEntity verificationConfig;
+
+    @OneToOne(mappedBy = "control", cascade = CascadeType.ALL, orphanRemoval = true)
+    private LogicalControlWarningConfigEntity warningConfig;
 }

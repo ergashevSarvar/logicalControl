@@ -10,11 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { ThemeMode } from "@/lib/types";
+import type { LocaleCode, ThemeMode } from "@/lib/types";
 import { useAuth } from "@/providers/auth-provider";
 
 export function LoginPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { setTheme, theme, resolvedTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -23,10 +23,40 @@ export function LoginPage() {
   const [password, setPassword] = useState("Admin123!");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const activeTheme = (theme ?? "light") as ThemeMode;
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
   const particleColors =
     resolvedTheme === "dark"
       ? ["#fb7185", "#a855f7", "#f97316", "#22d3ee", "#f472b6"]
       : ["#ff223e", "#5d1eb2", "#ff7300", "#22d3ee", "#d946ef"];
+
+  const loginTexts = {
+    error: {
+      OZ: "Kirish muvaffaqiyatsiz. Login va parolni tekshirib qayta urinib ko'ring.",
+      UZ: "Кириш муваффақиятсиз. Логин ва паролни текшириб қайта уриниб кўринг.",
+      RU: "Не удалось войти. Проверьте логин и пароль и попробуйте снова.",
+      EN: "Login failed. Check your username and password and try again.",
+    },
+    enter: {
+      OZ: "Tizimga kirish",
+      UZ: "Тизимга кириш",
+      RU: "Войти в систему",
+      EN: "Sign in",
+    },
+    subtitle: {
+      OZ: "Login va parolingizni kiriting.",
+      UZ: "Логин ва паролингизни киритинг.",
+      RU: "Введите логин и пароль.",
+      EN: "Enter your username and password.",
+    },
+    themeLabels: {
+      OZ: { light: "Yorug'", dark: "Qorong'i", system: "Tizim" },
+      UZ: { light: "Ёруғ", dark: "Қоронғи", system: "Тизим" },
+      RU: { light: "Светлая", dark: "Темная", system: "Система" },
+      EN: { light: "Light", dark: "Dark", system: "System" },
+    },
+  } as const;
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -44,7 +74,7 @@ export function LoginPage() {
         navigate(from, { replace: true });
       });
     } catch {
-      toast.error("Kirish muvaffaqiyatsiz. Demo ma'lumotlari bilan urinib ko'ring.");
+      toast.error(loginTexts.error[currentLocale]);
     } finally {
       setIsSubmitting(false);
     }
@@ -60,9 +90,9 @@ export function LoginPage() {
             <CardContent className="p-8 md:p-10">
               <form className="space-y-5 text-left" onSubmit={handleSubmit}>
                 <div className="space-y-2 pb-2 text-center">
-                  <p className="text-xs font-semibold uppercase tracking-[0.34em] text-muted-foreground">Mantiqiy Nazorat</p>
-                  <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">Tizimga kirish</h1>
-                  <p className="text-sm leading-6 text-muted-foreground">Login va parolingizni kiriting.</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.34em] text-muted-foreground">{t("appName")}</p>
+                  <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">{loginTexts.enter[currentLocale]}</h1>
+                  <p className="text-sm leading-6 text-muted-foreground">{loginTexts.subtitle[currentLocale]}</p>
                 </div>
 
                 <div className="space-y-2">
@@ -91,7 +121,7 @@ export function LoginPage() {
                   className="h-12 w-full rounded-2xl bg-foreground text-sm font-semibold text-background hover:bg-foreground/90"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? t("common.saving") : "Tizimga kirish"}
+                  {isSubmitting ? t("common.saving") : loginTexts.enter[currentLocale]}
                 </Button>
 
                 <p className="text-center text-sm text-muted-foreground">{t("login.demo")}</p>
@@ -102,9 +132,9 @@ export function LoginPage() {
           <div className="flex items-center justify-center">
             <div className="inline-flex items-center gap-1 rounded-full border border-border/80 bg-card/85 p-1 shadow-sm backdrop-blur-xl">
               {[
-                { value: "light", icon: SunMedium, label: "Light" },
-                { value: "dark", icon: Moon, label: "Dark" },
-                { value: "system", icon: Monitor, label: "System" },
+                { value: "light", icon: SunMedium, label: loginTexts.themeLabels[currentLocale].light },
+                { value: "dark", icon: Moon, label: loginTexts.themeLabels[currentLocale].dark },
+                { value: "system", icon: Monitor, label: loginTexts.themeLabels[currentLocale].system },
               ].map((option) => {
                 const Icon = option.icon;
                 const isActive = activeTheme === option.value;
@@ -131,3 +161,4 @@ export function LoginPage() {
     </div>
   );
 }
+

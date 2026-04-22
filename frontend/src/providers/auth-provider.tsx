@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import { currentUserRequest, loginRequest, persistToken, readPersistedToken } from "@/lib/api";
-import type { LoginResponse, UserProfile } from "@/lib/types";
+import { normalizeLocaleCode, type LoginResponse, type UserProfile } from "@/lib/types";
 
 type AuthContextValue = {
   user: UserProfile | null;
@@ -26,6 +26,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState<boolean>(Boolean(readPersistedToken()));
 
+  function normalizeProfile(profile: UserProfile): UserProfile {
+    return {
+      ...profile,
+      locale: normalizeLocaleCode(profile.locale),
+    };
+  }
+
   useEffect(() => {
     if (!token) {
       setIsBootstrapping(false);
@@ -34,7 +41,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     currentUserRequest()
       .then((profile) => {
-        setUser(profile);
+        setUser(normalizeProfile(profile));
       })
       .catch(() => {
         persistToken(null);
@@ -50,8 +57,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const response = await loginRequest(username, password);
     persistToken(response.accessToken);
     setToken(response.accessToken);
-    setUser(response.user);
-    return response;
+    const normalizedUser = normalizeProfile(response.user);
+    setUser(normalizedUser);
+    return {
+      ...response,
+      user: normalizedUser,
+    };
   }
 
   function logout() {
@@ -62,7 +73,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   async function refreshProfile() {
     const profile = await currentUserRequest();
-    setUser(profile);
+    setUser(normalizeProfile(profile));
   }
 
   return (

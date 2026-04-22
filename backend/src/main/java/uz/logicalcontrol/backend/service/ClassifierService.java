@@ -1,29 +1,42 @@
 package uz.logicalcontrol.backend.service;
 
 import jakarta.persistence.EntityNotFoundException;
+import java.sql.PreparedStatement;
+import java.sql.Types;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.logicalcontrol.backend.config.ClassifierCacheConfiguration;
 import uz.logicalcontrol.backend.entity.ClassifierDepartmentEntity;
 import uz.logicalcontrol.backend.entity.ClassifierProcessStageEntity;
+import uz.logicalcontrol.backend.entity.ClassifierRoleEntity;
 import uz.logicalcontrol.backend.entity.ClassifierServerEntity;
+import uz.logicalcontrol.backend.entity.ClassifierStateEntity;
 import uz.logicalcontrol.backend.entity.ClassifierSystemTypeEntity;
 import uz.logicalcontrol.backend.payload.ClassifierDtos;
 import uz.logicalcontrol.backend.repository.ClassifierDepartmentRepository;
 import uz.logicalcontrol.backend.repository.ClassifierProcessStageRepository;
+import uz.logicalcontrol.backend.repository.ClassifierRoleRepository;
 import uz.logicalcontrol.backend.repository.ClassifierServerRepository;
+import uz.logicalcontrol.backend.repository.ClassifierStateRepository;
 import uz.logicalcontrol.backend.repository.ClassifierSystemTypeRepository;
 
 @Service
@@ -31,8 +44,8 @@ import uz.logicalcontrol.backend.repository.ClassifierSystemTypeRepository;
 public class ClassifierService {
 
     private static final String ENTITY_METADATA_TABLE_NAME = "entity_column_metadata";
-    private static final String CLASSIFIER_TABLES_NAME = "classifier_tables";
-    private static final String CLASSIFIER_TABLE_COLUMNS_NAME = "classifier_table_columns";
+    private static final String CLASSIFIER_TABLES_NAME = "biz_tables";
+    private static final String CLASSIFIER_TABLE_COLUMNS_NAME = "biz_table_columns";
     private static final String SYSTEM_TYPE_RW = "Temir yo'l (RW)";
     private static final String SYSTEM_TYPE_MB = "Yuksiz yoki yengil transport (MB)";
     private static final String SYSTEM_TYPE_EK = "Eksport uch qadam (EK)";
@@ -41,11 +54,21 @@ public class ClassifierService {
 
     private final ClassifierDepartmentRepository classifierDepartmentRepository;
     private final ClassifierProcessStageRepository classifierProcessStageRepository;
+    private final ClassifierRoleRepository classifierRoleRepository;
     private final ClassifierServerRepository classifierServerRepository;
+    private final ClassifierStateRepository classifierStateRepository;
     private final ClassifierSystemTypeRepository classifierSystemTypeRepository;
     private final JdbcTemplate jdbcTemplate;
 
     private static final Set<String> SYSTEM_SCOPE_TYPES = Set.of("Ichki", "Tashqi");
+    private static final Map<String, String> STATE_LANG_CODES = Map.of(
+        "oz", "OZ",
+        "uz", "UZ",
+        "uzlatn", "OZ",
+        "uzcyrl", "UZ",
+        "ru", "RU",
+        "en", "EN"
+    );
     private static final List<TableDefinition> FALLBACK_TABLE_DEFINITIONS = List.of(
         new TableDefinition(
             "AUTODECL",
@@ -263,6 +286,111 @@ public class ClassifierService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = ClassifierCacheConfiguration.ROLES_CACHE, sync = true)
+    public List<ClassifierDtos.RoleItem> listRoles() {
+        return classifierRoleRepository.findAllByOrderByNameAsc().stream()
+            .map(this::toRoleItem)
+            .toList();
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.ROLES_CACHE, allEntries = true)
+    public ClassifierDtos.RoleItem createRole(ClassifierDtos.RoleRequest request) {
+        validateRole(request.name(), null);
+
+        var entity = ClassifierRoleEntity.builder()
+            .name(request.name().trim())
+            .active(Boolean.TRUE.equals(request.active()))
+            .build();
+
+        return toRoleItem(classifierRoleRepository.save(entity));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.ROLES_CACHE, allEntries = true)
+    public ClassifierDtos.RoleItem updateRole(UUID id, ClassifierDtos.RoleRequest request) {
+        validateRole(request.name(), id);
+
+        var entity = classifierRoleRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Rol topilmadi: " + id));
+
+        entity.setName(request.name().trim());
+        entity.setActive(Boolean.TRUE.equals(request.active()));
+
+        return toRoleItem(classifierRoleRepository.save(entity));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.ROLES_CACHE, allEntries = true)
+    public void deleteRole(UUID id) {
+        var entity = classifierRoleRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Rol topilmadi: " + id));
+
+        classifierRoleRepository.delete(entity);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = ClassifierCacheConfiguration.STATES_CACHE,
+        key = "#lang == null || #lang.isBlank() ? 'ALL' : #lang.toLowerCase()",
+        sync = true
+    )
+    public List<ClassifierDtos.StateItem> listStates(String lang) {
+        var normalizedLang = normalizeStateLang(lang, true);
+        var rows = normalizedLang == null
+            ? classifierStateRepository.findAllByOrderByCodeAscLangCodeAscNameAsc()
+            : classifierStateRepository.findAllByLangCodeIgnoreCaseOrderByCodeAscNameAsc(normalizedLang);
+
+        return rows.stream()
+            .map(this::toStateItem)
+            .toList();
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.STATES_CACHE, allEntries = true)
+    public ClassifierDtos.StateItem createState(ClassifierDtos.StateRequest request) {
+        var normalizedCode = normalizeStateCode(request.code());
+        var normalizedLang = normalizeStateLang(request.lang(), false);
+        validateState(normalizedCode, request.name(), normalizedLang, null);
+
+        var entity = ClassifierStateEntity.builder()
+            .code(normalizedCode)
+            .name(request.name().trim())
+            .langCode(normalizedLang)
+            .active(Boolean.TRUE.equals(request.active()))
+            .build();
+
+        return toStateItem(classifierStateRepository.save(entity));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.STATES_CACHE, allEntries = true)
+    public ClassifierDtos.StateItem updateState(UUID id, ClassifierDtos.StateRequest request) {
+        var normalizedCode = normalizeStateCode(request.code());
+        var normalizedLang = normalizeStateLang(request.lang(), false);
+        validateState(normalizedCode, request.name(), normalizedLang, id);
+
+        var entity = classifierStateRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Status topilmadi: " + id));
+
+        entity.setCode(normalizedCode);
+        entity.setName(request.name().trim());
+        entity.setLangCode(normalizedLang);
+        entity.setActive(Boolean.TRUE.equals(request.active()));
+
+        return toStateItem(classifierStateRepository.save(entity));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ClassifierCacheConfiguration.STATES_CACHE, allEntries = true)
+    public void deleteState(UUID id) {
+        var entity = classifierStateRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Status topilmadi: " + id));
+
+        classifierStateRepository.delete(entity);
+    }
+
+    @Transactional(readOnly = true)
     @Cacheable(cacheNames = ClassifierCacheConfiguration.TABLES_CACHE, sync = true)
     public List<ClassifierDtos.TableItem> listTables() {
         try {
@@ -294,17 +422,17 @@ public class ClassifierService {
 
         var updated = jdbcTemplate.update(
             """
-                update classifier_tables
+                update biz_tables
                 set table_name = ?,
                     description = ?,
                     system_type = ?,
-                    updated_at = now()
+                    updated_at = current timestamp
                 where id = ?
                 """,
             request.tableName().trim(),
             request.description().trim(),
             request.systemType().trim(),
-            id
+            toDbUuid(id)
         );
         if (updated == 0) {
             throw new EntityNotFoundException("Jadval topilmadi: " + id);
@@ -313,11 +441,11 @@ public class ClassifierService {
         var existingColumnIds = new HashSet<>(jdbcTemplate.query(
             """
                 select id
-                from classifier_table_columns
+                from biz_table_columns
                 where classifier_table_id = ?
                 """,
             (resultSet, rowNumber) -> UUID.fromString(resultSet.getString("id")),
-            id
+            toDbUuid(id)
         ));
 
         var columns = request.columns() == null ? List.<ClassifierDtos.TableColumnRequest>of() : request.columns();
@@ -328,23 +456,23 @@ public class ClassifierService {
 
             jdbcTemplate.update(
                 """
-                    update classifier_table_columns
+                    update biz_table_columns
                     set column_name = ?,
                         data_type = ?,
                         column_description = ?,
                         nullable = ?,
                         ordinal_position = ?,
-                        updated_at = now()
+                        updated_at = current timestamp
                     where id = ?
                       and classifier_table_id = ?
                     """,
                 column.name().trim(),
                 column.dataType().trim(),
                 trimToNull(column.description()),
-                column.nullable(),
+                toDbNullableFlag(column.nullable()),
                 column.ordinalPosition(),
-                column.id(),
-                id
+                toDbUuid(column.id()),
+                toDbUuid(id)
             );
         }
 
@@ -354,7 +482,7 @@ public class ClassifierService {
     @Transactional
     @CacheEvict(cacheNames = ClassifierCacheConfiguration.TABLES_CACHE, allEntries = true)
     public void deleteTable(UUID id) {
-        var deleted = jdbcTemplate.update("delete from classifier_tables where id = ?", id);
+        var deleted = jdbcTemplate.update("delete from biz_tables where id = ?", toDbUuid(id));
         if (deleted == 0) {
             throw new EntityNotFoundException("Jadval topilmadi: " + id);
         }
@@ -428,6 +556,39 @@ public class ClassifierService {
         }
     }
 
+    private void validateRole(String name, UUID id) {
+        var normalizedName = name == null ? "" : name.trim();
+
+        if (normalizedName.isBlank()) {
+            throw new IllegalArgumentException("Rol nomi majburiy");
+        }
+
+        var duplicateName = id == null
+            ? classifierRoleRepository.existsByNameIgnoreCase(normalizedName)
+            : classifierRoleRepository.existsByNameIgnoreCaseAndIdNot(normalizedName, id);
+        if (duplicateName) {
+            throw new IllegalArgumentException("Bu rol allaqachon mavjud");
+        }
+    }
+
+    private void validateState(String code, String name, String lang, UUID id) {
+        var normalizedName = name == null ? "" : name.trim();
+
+        if (code.isBlank()) {
+            throw new IllegalArgumentException("Status kodi majburiy");
+        }
+        if (normalizedName.isBlank()) {
+            throw new IllegalArgumentException("Status nomi majburiy");
+        }
+
+        var duplicate = id == null
+            ? classifierStateRepository.existsByCodeIgnoreCaseAndLangCodeIgnoreCase(code, lang)
+            : classifierStateRepository.existsByCodeIgnoreCaseAndLangCodeIgnoreCaseAndIdNot(code, lang, id);
+        if (duplicate) {
+            throw new IllegalArgumentException("Bu status kodi va til kombinatsiyasi allaqachon mavjud");
+        }
+    }
+
     private void validateTableRequest(ClassifierDtos.TableRequest request, UUID id) {
         var normalizedTableName = request.tableName() == null ? "" : request.tableName().trim();
         var normalizedDescription = request.description() == null ? "" : request.description().trim();
@@ -443,20 +604,18 @@ public class ClassifierService {
             throw new IllegalArgumentException("Tizim turi majburiy");
         }
 
-        var duplicateTableName = jdbcTemplate.queryForObject(
+        var duplicateTableNameCount = jdbcTemplate.queryForObject(
             """
-                select exists (
-                    select 1
-                    from classifier_tables
-                    where lower(table_name) = lower(?)
-                      and id <> ?
-                )
+                select count(*)
+                from biz_tables
+                where lower(table_name) = lower(?)
+                  and id <> ?
                 """,
-            Boolean.class,
+            Long.class,
             normalizedTableName,
             id
         );
-        if (Boolean.TRUE.equals(duplicateTableName)) {
+        if (duplicateTableNameCount != null && duplicateTableNameCount > 0) {
             throw new IllegalArgumentException("Bu jadval nomi allaqachon mavjud");
         }
 
@@ -538,6 +697,28 @@ public class ClassifierService {
         );
     }
 
+    private ClassifierDtos.RoleItem toRoleItem(ClassifierRoleEntity entity) {
+        return new ClassifierDtos.RoleItem(
+            entity.getId(),
+            entity.getName(),
+            entity.isActive(),
+            entity.getCreatedAt(),
+            entity.getUpdatedAt()
+        );
+    }
+
+    private ClassifierDtos.StateItem toStateItem(ClassifierStateEntity entity) {
+        return new ClassifierDtos.StateItem(
+            entity.getId(),
+            entity.getCode(),
+            entity.getName(),
+            entity.getLangCode(),
+            entity.isActive(),
+            entity.getCreatedAt(),
+            entity.getUpdatedAt()
+        );
+    }
+
     private ClassifierDtos.TableItem loadStoredTableById(UUID tableId) {
         var rows = jdbcTemplate.query(
             """
@@ -552,11 +733,15 @@ public class ClassifierService {
                     c.column_description,
                     c.nullable,
                     c.ordinal_position
-                from classifier_tables t
-                left join classifier_table_columns c
+                from biz_tables t
+                left join biz_table_columns c
                     on c.classifier_table_id = t.id
                 where t.id = ?
-                order by t.table_name, c.ordinal_position nulls last, c.column_name
+                order by
+                    t.table_name,
+                    case when c.ordinal_position is null then 1 else 0 end,
+                    c.ordinal_position,
+                    c.column_name
                 """,
             (resultSet, rowNumber) -> new StoredClassifierTableRow(
                 UUID.fromString(resultSet.getString("table_id")),
@@ -567,7 +752,7 @@ public class ClassifierService {
                 resultSet.getString("column_name"),
                 resultSet.getString("data_type"),
                 resultSet.getString("column_description"),
-                (Boolean) resultSet.getObject("nullable"),
+                readNullableBoolean(resultSet, "nullable"),
                 (Integer) resultSet.getObject("ordinal_position")
             ),
             tableId
@@ -623,10 +808,14 @@ public class ClassifierService {
                         c.column_description,
                         c.nullable,
                         c.ordinal_position
-                    from classifier_tables t
-                    left join classifier_table_columns c
+                    from biz_tables t
+                    left join biz_table_columns c
                         on c.classifier_table_id = t.id
-                    order by t.table_name, c.ordinal_position nulls last, c.column_name
+                    order by
+                        t.table_name,
+                        case when c.ordinal_position is null then 1 else 0 end,
+                        c.ordinal_position,
+                        c.column_name
                     """,
                 (resultSet, rowNumber) -> new StoredClassifierTableRow(
                     UUID.fromString(resultSet.getString("table_id")),
@@ -637,7 +826,7 @@ public class ClassifierService {
                     resultSet.getString("column_name"),
                     resultSet.getString("data_type"),
                     resultSet.getString("column_description"),
-                    (Boolean) resultSet.getObject("nullable"),
+                    readNullableBoolean(resultSet, "nullable"),
                     (Integer) resultSet.getObject("ordinal_position")
                 )
             );
@@ -724,12 +913,12 @@ public class ClassifierService {
             columnRows.addAll(accumulator.toColumnInsertRows(tableId));
         });
 
-        jdbcTemplate.update("delete from classifier_table_columns");
-        jdbcTemplate.update("delete from classifier_tables");
+        jdbcTemplate.update("delete from biz_table_columns");
+        jdbcTemplate.update("delete from biz_tables");
 
         jdbcTemplate.batchUpdate(
             """
-                insert into classifier_tables (
+                insert into biz_tables (
                     id,
                     table_name,
                     entity_name_definition,
@@ -740,7 +929,7 @@ public class ClassifierService {
             tableRows,
             tableRows.size(),
             (preparedStatement, row) -> {
-                preparedStatement.setObject(1, row.id());
+                preparedStatement.setString(1, toDbUuid(row.id()));
                 preparedStatement.setString(2, row.tableName());
                 preparedStatement.setString(3, row.entityNameDefinition());
                 preparedStatement.setString(4, row.description());
@@ -750,7 +939,7 @@ public class ClassifierService {
 
         jdbcTemplate.batchUpdate(
             """
-                insert into classifier_table_columns (
+                insert into biz_table_columns (
                     id,
                     classifier_table_id,
                     column_name,
@@ -766,15 +955,15 @@ public class ClassifierService {
             columnRows,
             columnRows.size(),
             (preparedStatement, row) -> {
-                preparedStatement.setObject(1, row.id());
-                preparedStatement.setObject(2, row.classifierTableId());
+                preparedStatement.setString(1, toDbUuid(row.id()));
+                preparedStatement.setString(2, toDbUuid(row.classifierTableId()));
                 preparedStatement.setString(3, row.columnName());
                 preparedStatement.setString(4, row.columnNameDefinition());
                 preparedStatement.setString(5, row.columnType());
                 preparedStatement.setString(6, row.columnLength());
                 preparedStatement.setString(7, row.dataType());
                 preparedStatement.setString(8, row.columnDescription());
-                preparedStatement.setObject(9, row.nullable());
+                setNullableSmallInt(preparedStatement, 9, row.nullable());
                 preparedStatement.setInt(10, row.ordinalPosition());
             }
         );
@@ -789,19 +978,7 @@ public class ClassifierService {
     }
 
     private boolean tableExists(String tableName) {
-        var exists = jdbcTemplate.queryForObject(
-            """
-                select exists (
-                    select 1
-                    from information_schema.tables
-                    where table_schema not in ('information_schema', 'pg_catalog')
-                      and lower(table_name) = ?
-                )
-                """,
-            Boolean.class,
-            tableName
-        );
-
+        var exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) connection -> metadataTableExists(connection, tableName));
         return Boolean.TRUE.equals(exists);
     }
 
@@ -810,38 +987,209 @@ public class ClassifierService {
         return count == null ? 0L : count;
     }
 
-    private List<ClassifierDtos.TableColumnItem> loadLiveTableColumns(String tableName) {
-        var columns = jdbcTemplate.query(
-            """
-                select
-                    c.column_name,
-                    c.data_type,
-                    coalesce(
-                        pg_catalog.col_description(
-                            (quote_ident(c.table_schema) || '.' || quote_ident(c.table_name))::regclass::oid,
-                            c.ordinal_position
-                        ),
-                        ''
-                    ) as column_description,
-                    c.is_nullable,
-                    c.ordinal_position
-                from information_schema.columns c
-                where lower(c.table_name) = lower(?)
-                  and c.table_schema not in ('information_schema', 'pg_catalog')
-                order by c.ordinal_position
-                """,
-            (resultSet, rowNumber) -> new ClassifierDtos.TableColumnItem(
-                null,
-                resultSet.getString("column_name"),
-                resultSet.getString("data_type"),
-                trimToNull(resultSet.getString("column_description")),
-                "YES".equalsIgnoreCase(resultSet.getString("is_nullable")),
-                resultSet.getInt("ordinal_position")
-            ),
-            tableName
-        );
+    private String toDbUuid(UUID id) {
+        return id == null ? null : id.toString();
+    }
 
-        return columns;
+    private String normalizeStateCode(String code) {
+        var normalized = code == null ? "" : code.trim();
+        if (normalized.isBlank()) {
+            return "";
+        }
+
+        return normalized
+            .replaceAll("[\\s-]+", "_")
+            .toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeStateLang(String lang, boolean allowBlank) {
+        var normalized = lang == null ? "" : lang.trim();
+        if (normalized.isBlank()) {
+            if (allowBlank) {
+                return null;
+            }
+            throw new IllegalArgumentException("Til kodi majburiy");
+        }
+
+        var canonical = STATE_LANG_CODES.get(normalized.toLowerCase(Locale.ROOT));
+        if (canonical == null) {
+            throw new IllegalArgumentException("Til kodi noto'g'ri tanlangan");
+        }
+        return canonical;
+    }
+
+    private Integer toDbNullableFlag(Boolean nullable) {
+        if (nullable == null) {
+            return null;
+        }
+        return nullable ? 1 : 0;
+    }
+
+    private void setNullableSmallInt(PreparedStatement preparedStatement, int parameterIndex, Boolean value) throws SQLException {
+        if (value == null) {
+            preparedStatement.setNull(parameterIndex, Types.SMALLINT);
+            return;
+        }
+        preparedStatement.setInt(parameterIndex, value ? 1 : 0);
+    }
+
+    private List<ClassifierDtos.TableColumnItem> loadLiveTableColumns(String tableName) {
+        var columns = jdbcTemplate.execute((ConnectionCallback<List<ClassifierDtos.TableColumnItem>>) connection ->
+            loadLiveTableColumns(connection, tableName)
+        );
+        return columns == null ? List.of() : columns;
+    }
+
+    private boolean metadataTableExists(Connection connection, String tableName) throws SQLException {
+        var metadata = connection.getMetaData();
+
+        for (var schemaPattern : resolveSchemaPatterns(connection)) {
+            for (var tablePattern : resolveIdentifierPatterns(tableName)) {
+                try (ResultSet resultSet = metadata.getTables(null, schemaPattern, tablePattern, new String[] {"TABLE"})) {
+                    if (resultSet.next()) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private List<ClassifierDtos.TableColumnItem> loadLiveTableColumns(Connection connection, String tableName) throws SQLException {
+        var metadata = connection.getMetaData();
+
+        for (var schemaPattern : resolveSchemaPatterns(connection)) {
+            for (var tablePattern : resolveIdentifierPatterns(tableName)) {
+                var columns = new ArrayList<ClassifierDtos.TableColumnItem>();
+                try (ResultSet resultSet = metadata.getColumns(null, schemaPattern, tablePattern, "%")) {
+                    while (resultSet.next()) {
+                        var columnName = trimToNull(resultSet.getString("COLUMN_NAME"));
+                        if (columnName == null) {
+                            continue;
+                        }
+
+                        var columnType = trimToNull(resultSet.getString("TYPE_NAME"));
+                        var columnLength = formatColumnLength(
+                            toNullableInteger(resultSet, "COLUMN_SIZE"),
+                            toNullableInteger(resultSet, "DECIMAL_DIGITS")
+                        );
+                        var ordinalPosition = toNullableInteger(resultSet, "ORDINAL_POSITION");
+
+                        columns.add(new ClassifierDtos.TableColumnItem(
+                            null,
+                            columnName,
+                            buildColumnDataType(columnType, columnLength),
+                            trimToNull(resultSet.getString("REMARKS")),
+                            resolveNullable(resultSet),
+                            ordinalPosition == null ? columns.size() + 1 : ordinalPosition
+                        ));
+                    }
+                }
+
+                if (!columns.isEmpty()) {
+                    columns.sort(Comparator.comparingInt(ClassifierDtos.TableColumnItem::ordinalPosition));
+                    return columns;
+                }
+            }
+        }
+
+        return List.of();
+    }
+
+    private List<String> resolveSchemaPatterns(Connection connection) throws SQLException {
+        var patterns = new ArrayList<String>();
+        addSchemaPattern(patterns, connection.getSchema());
+        addSchemaPattern(patterns, connection.getMetaData().getUserName());
+        if (!patterns.contains(null)) {
+            patterns.add(null);
+        }
+        return patterns;
+    }
+
+    private void addSchemaPattern(List<String> patterns, String candidate) {
+        var normalized = trimToNull(candidate);
+        if (normalized == null) {
+            return;
+        }
+
+        if (!patterns.contains(normalized)) {
+            patterns.add(normalized);
+        }
+
+        var upperCase = normalized.toUpperCase(Locale.ROOT);
+        if (!patterns.contains(upperCase)) {
+            patterns.add(upperCase);
+        }
+    }
+
+    private List<String> resolveIdentifierPatterns(String identifier) {
+        var patterns = new ArrayList<String>();
+        var normalized = trimToNull(identifier);
+        if (normalized == null) {
+            return patterns;
+        }
+
+        patterns.add(normalized);
+
+        var upperCase = normalized.toUpperCase(Locale.ROOT);
+        if (!patterns.contains(upperCase)) {
+            patterns.add(upperCase);
+        }
+
+        return patterns;
+    }
+
+    private Integer toNullableInteger(ResultSet resultSet, String columnLabel) throws SQLException {
+        var value = resultSet.getInt(columnLabel);
+        return resultSet.wasNull() ? null : value;
+    }
+
+    private Boolean readNullableBoolean(ResultSet resultSet, String columnLabel) throws SQLException {
+        var value = resultSet.getObject(columnLabel);
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+
+        if (value instanceof Number numberValue) {
+            return numberValue.intValue() != 0;
+        }
+
+        var normalized = value.toString().trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+
+        if ("1".equals(normalized) || "true".equalsIgnoreCase(normalized) || "y".equalsIgnoreCase(normalized)) {
+            return Boolean.TRUE;
+        }
+
+        if ("0".equals(normalized) || "false".equalsIgnoreCase(normalized) || "n".equalsIgnoreCase(normalized)) {
+            return Boolean.FALSE;
+        }
+
+        return null;
+    }
+
+    private Boolean resolveNullable(ResultSet resultSet) throws SQLException {
+        var nullableCode = resultSet.getInt("NULLABLE");
+        if (resultSet.wasNull()) {
+            return null;
+        }
+
+        if (nullableCode == DatabaseMetaData.columnNullable) {
+            return Boolean.TRUE;
+        }
+
+        if (nullableCode == DatabaseMetaData.columnNoNulls) {
+            return Boolean.FALSE;
+        }
+
+        return null;
     }
 
     private String normalizeEntityName(String entityName) {
@@ -925,6 +1273,18 @@ public class ClassifierService {
         }
 
         return normalizedLength == null ? normalizedType : normalizedType + " (" + normalizedLength + ")";
+    }
+
+    private String formatColumnLength(Integer columnSize, Integer decimalDigits) {
+        if (columnSize == null || columnSize <= 0) {
+            return null;
+        }
+
+        if (decimalDigits != null && decimalDigits > 0) {
+            return columnSize + "," + decimalDigits;
+        }
+
+        return String.valueOf(columnSize);
     }
 
     private String extractBaseTableName(String entityName) {
@@ -1142,3 +1502,4 @@ public class ClassifierService {
         }
     }
 }
+

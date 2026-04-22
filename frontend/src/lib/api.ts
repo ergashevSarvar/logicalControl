@@ -5,8 +5,12 @@ import type {
   ClassifierDepartmentRequest,
   ClassifierProcessStage,
   ClassifierProcessStageRequest,
+  ClassifierRole,
+  ClassifierRoleRequest,
   ClassifierServer,
   ClassifierServerRequest,
+  ClassifierState,
+  ClassifierStateRequest,
   ClassifierSystemType,
   ClassifierSystemTypeRequest,
   ClassifierTable,
@@ -201,6 +205,18 @@ export async function fetchClassifierServers() {
   return data;
 }
 
+export async function fetchClassifierRoles() {
+  const { data } = await api.get<ClassifierRole[]>("/classifiers/roles");
+  return data;
+}
+
+export async function fetchClassifierStates(lang?: string) {
+  const { data } = await api.get<ClassifierState[]>("/classifiers/states", {
+    params: lang ? { lang } : undefined,
+  });
+  return data;
+}
+
 export async function fetchClassifierTables() {
   const { data } = await api.get<ClassifierTable[]>("/classifiers/tables");
   return data;
@@ -234,11 +250,39 @@ export async function createClassifierServer(payload: ClassifierServerRequest) {
   return data;
 }
 
+export async function createClassifierRole(payload: ClassifierRoleRequest) {
+  const { data } = await api.post<ClassifierRole>("/classifiers/roles", payload);
+  return data;
+}
+
+export async function createClassifierState(payload: ClassifierStateRequest) {
+  const { data } = await api.post<ClassifierState>("/classifiers/states", payload);
+  return data;
+}
+
 export async function updateClassifierServer(id: string, payload: ClassifierServerRequest) {
   const { data } = await api.put<ClassifierServer>(`/classifiers/servers/${id}`, payload);
   return data;
 }
 
+export async function updateClassifierRole(id: string, payload: ClassifierRoleRequest) {
+  const { data } = await api.put<ClassifierRole>(`/classifiers/roles/${id}`, payload);
+  return data;
+}
+
+export async function updateClassifierState(id: string, payload: ClassifierStateRequest) {
+  const { data } = await api.put<ClassifierState>(`/classifiers/states/${id}`, payload);
+  return data;
+}
+
 export async function deleteClassifierServer(id: string) {
   await api.delete(`/classifiers/servers/${id}`);
+}
+
+export async function deleteClassifierRole(id: string) {
+  await api.delete(`/classifiers/roles/${id}`);
+}
+
+export async function deleteClassifierState(id: string) {
+  await api.delete(`/classifiers/states/${id}`);
 }

@@ -15,13 +15,13 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "classifier_process_stages")
+@Table(name = "process_stages")
 public class ClassifierProcessStageEntity extends BaseEntity {
 
-    @Column(nullable = false, length = 180)
+    @Column(nullable = false, length = 180, columnDefinition = "VARCHAR(180) CCSID 1208")
     private String name;
 
-    @Column(length = 1200)
+    @Column(length = 1200, columnDefinition = "VARCHAR(1200) CCSID 1208")
     private String description;
 
     @Column(nullable = false)

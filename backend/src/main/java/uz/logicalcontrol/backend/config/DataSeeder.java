@@ -16,19 +16,24 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.logicalcontrol.backend.entity.ChangeLogEntity;
 import uz.logicalcontrol.backend.entity.ClassifierDepartmentEntity;
 import uz.logicalcontrol.backend.entity.ClassifierProcessStageEntity;
+import uz.logicalcontrol.backend.entity.ClassifierRoleEntity;
 import uz.logicalcontrol.backend.entity.ClassifierServerEntity;
+import uz.logicalcontrol.backend.entity.ClassifierStateEntity;
 import uz.logicalcontrol.backend.entity.ClassifierSystemTypeEntity;
 import uz.logicalcontrol.backend.entity.DictionaryEntryEntity;
 import uz.logicalcontrol.backend.entity.ExceptionEntryEntity;
 import uz.logicalcontrol.backend.entity.ExecutionLogEntity;
 import uz.logicalcontrol.backend.entity.LogicalControlEntity;
 import uz.logicalcontrol.backend.entity.LogicalRuleEntity;
+import uz.logicalcontrol.backend.entity.LogicalControlStateHistoryEntity;
 import uz.logicalcontrol.backend.entity.RoleEntity;
 import uz.logicalcontrol.backend.entity.UserEntity;
 import uz.logicalcontrol.backend.repository.ChangeLogRepository;
 import uz.logicalcontrol.backend.repository.ClassifierDepartmentRepository;
 import uz.logicalcontrol.backend.repository.ClassifierProcessStageRepository;
+import uz.logicalcontrol.backend.repository.ClassifierRoleRepository;
 import uz.logicalcontrol.backend.repository.ClassifierServerRepository;
+import uz.logicalcontrol.backend.repository.ClassifierStateRepository;
 import uz.logicalcontrol.backend.repository.ClassifierSystemTypeRepository;
 import uz.logicalcontrol.backend.repository.DictionaryEntryRepository;
 import uz.logicalcontrol.backend.repository.ExceptionEntryRepository;
@@ -41,10 +46,16 @@ import uz.logicalcontrol.backend.repository.UserRepository;
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
 
+    private static final String DEFAULT_STATE_CODE = "NEW";
+    private static final String DEFAULT_STATE_LANG = "OZ";
+
     private record ProcessStageSeed(String name, String description, int sortOrder) {
     }
 
     private record ServerSeed(String name, String description) {
+    }
+
+    private record StateSeed(String code, String lang, String name) {
     }
 
     private static final List<ProcessStageSeed> REQUIRED_PROCESS_STAGES = List.of(
@@ -78,6 +89,25 @@ public class DataSeeder implements CommandLineRunner {
         new ServerSeed("Dc1paym01.db.gtk", "To'lovlar serveri")
     );
 
+    private static final List<StateSeed> REQUIRED_STATES = List.of(
+        new StateSeed("NEW", "OZ", "Yangi"),
+        new StateSeed("NEW", "UZ", "\u042f\u043d\u0433\u0438"),
+        new StateSeed("NEW", "RU", "\u041d\u043e\u0432\u044b\u0439"),
+        new StateSeed("NEW", "EN", "New"),
+        new StateSeed("SAVED", "OZ", "Ma'lumotlar saqlangan"),
+        new StateSeed("SAVED", "UZ", "\u041c\u0430\u044a\u043b\u0443\u043c\u043e\u0442\u043b\u0430\u0440 \u0441\u0430\u049b\u043b\u0430\u043d\u0433\u0430\u043d"),
+        new StateSeed("SAVED", "RU", "\u0414\u0430\u043d\u043d\u044b\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b"),
+        new StateSeed("SAVED", "EN", "Data saved"),
+        new StateSeed("APPROVED_BY_DEPARTMENT", "OZ", "XXX Boshqarmasi tomonidan tasdiqlangan"),
+        new StateSeed("APPROVED_BY_DEPARTMENT", "UZ", "XXX \u0411\u043e\u0448\u049b\u0430\u0440\u043c\u0430\u0441\u0438 \u0442\u043e\u043c\u043e\u043d\u0438\u0434\u0430\u043d \u0442\u0430\u0441\u0434\u0438\u049b\u043b\u0430\u043d\u0433\u0430\u043d"),
+        new StateSeed("APPROVED_BY_DEPARTMENT", "RU", "\u0423\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435\u043c XXX"),
+        new StateSeed("APPROVED_BY_DEPARTMENT", "EN", "Approved by XXX Department"),
+        new StateSeed("APPROVED", "OZ", "Mantiqiy nazorat tasdiqlangan"),
+        new StateSeed("APPROVED", "UZ", "\u041c\u0430\u043d\u0442\u0438\u049b\u0438\u0439 \u043d\u0430\u0437\u043e\u0440\u0430\u0442 \u0442\u0430\u0441\u0434\u0438\u049b\u043b\u0430\u043d\u0433\u0430\u043d"),
+        new StateSeed("APPROVED", "RU", "\u041b\u043e\u0433\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d"),
+        new StateSeed("APPROVED", "EN", "Logical control approved")
+    );
+
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final LogicalControlRepository logicalControlRepository;
@@ -87,7 +117,9 @@ public class DataSeeder implements CommandLineRunner {
     private final ExceptionEntryRepository exceptionEntryRepository;
     private final ClassifierDepartmentRepository classifierDepartmentRepository;
     private final ClassifierProcessStageRepository classifierProcessStageRepository;
+    private final ClassifierRoleRepository classifierRoleRepository;
     private final ClassifierServerRepository classifierServerRepository;
+    private final ClassifierStateRepository classifierStateRepository;
     private final ClassifierSystemTypeRepository classifierSystemTypeRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -98,6 +130,7 @@ public class DataSeeder implements CommandLineRunner {
         seedDictionaries();
         seedExceptions();
         seedClassifiers();
+        backfillControlStates();
     }
 
     private void seedRolesAndAdmin() {
@@ -113,7 +146,7 @@ public class DataSeeder implements CommandLineRunner {
                 .username("admin")
                 .fullName("Logical Control Administrator")
                 .passwordHash(passwordEncoder.encode("Admin123!"))
-                .locale("uz-Latn")
+                .locale("OZ")
                 .roles(new java.util.LinkedHashSet<>(List.of(adminRole, analystRole, auditorRole)))
                 .enabled(true)
                 .build()
@@ -130,14 +163,14 @@ public class DataSeeder implements CommandLineRunner {
             dictionary("SYSTEM_NAME", "EK", "EK", "EK", "EK", "EK"),
             dictionary("SYSTEM_NAME", "RW", "RW", "RW", "RW", "RW"),
             dictionary("SYSTEM_NAME", "EC", "EC", "EC", "EC", "EC"),
-            dictionary("CONTROL_TYPE", "WARNING", "Ogohlantirish", "Р С›Р С–Р С•РўС–Р В»Р В°Р Р…РЎвЂљР С‘РЎР‚Р С‘РЎв‚¬", "Р СџРЎР‚Р ВµР Т‘РЎС“Р С—РЎР‚Р ВµР В¶Р Т‘Р ВµР Р…Р С‘Р Вµ", "Warning"),
-            dictionary("CONTROL_TYPE", "ALLOW", "Ruxsat berish", "Р В РЎС“РЎвЂ¦РЎРѓР В°РЎвЂљ Р В±Р ВµРЎР‚Р С‘РЎв‚¬", "Р В Р В°Р В·РЎР‚Р ВµРЎв‚¬Р ВµР Р…Р С‘Р Вµ", "Allow"),
-            dictionary("CONTROL_TYPE", "BLOCK", "Taqiqlash", "Р СћР В°РўвЂєР С‘РўвЂєР В»Р В°РЎв‚¬", "Р вЂ”Р В°Р С—РЎР‚Р ВµРЎвЂљ", "Block"),
-            dictionary("PROCESS_STAGE", "VERIFICATION", "Verifikatsiya", "Р вЂ™Р ВµРЎР‚Р С‘РЎвЂћР С‘Р С”Р В°РЎвЂ Р С‘РЎРЏ", "Р вЂ™Р ВµРЎР‚Р С‘РЎвЂћР С‘Р С”Р В°РЎвЂ Р С‘РЎРЏ", "Verification"),
-            dictionary("PROCESS_STAGE", "FORMALIZATION", "Rasmiylashtirish", "Р В Р В°РЎРѓР СР С‘Р в„–Р В»Р В°РЎв‚¬РЎвЂљР С‘РЎР‚Р С‘РЎв‚¬", "Р С›РЎвЂћР С•РЎР‚Р СР В»Р ВµР Р…Р С‘Р Вµ", "Formalization"),
-            dictionary("PROCESS_STAGE", "ACCEPTANCE", "Qabul qilish", "РўС™Р В°Р В±РЎС“Р В» РўвЂєР С‘Р В»Р С‘РЎв‚¬", "Р СџРЎР‚Р С‘Р ВµР СР С”Р В°", "Acceptance"),
-            dictionary("DEPARTMENT", "RISK", "Risk boshqarmasi", "Р В Р С‘РЎРѓР С” Р В±Р С•РЎв‚¬РўвЂєР В°РЎР‚Р СР В°РЎРѓР С‘", "Р Р€Р С—РЎР‚Р В°Р Р†Р В»Р ВµР Р…Р С‘Р Вµ РЎР‚Р С‘РЎРѓР С”Р В°", "Risk Department"),
-            dictionary("DEPARTMENT", "CUSTOMS", "Bojxona nazorati", "Р вЂР С•Р В¶РЎвЂ¦Р С•Р Р…Р В° Р Р…Р В°Р В·Р С•РЎР‚Р В°РЎвЂљР С‘", "Р СћР В°Р СР С•Р В¶Р ВµР Р…Р Р…РЎвЂ№Р в„– Р С”Р С•Р Р…РЎвЂљРЎР‚Р С•Р В»РЎРЉ", "Customs Control")
+            dictionary("CONTROL_TYPE", "WARNING", "Ogohlantirish", "\u041e\u0493\u043e\u04b3\u043b\u0430\u043d\u0442\u0438\u0440\u0438\u0448", "\u041f\u0440\u0435\u0434\u0443\u043f\u0440\u0435\u0436\u0434\u0435\u043d\u0438\u0435", "Warning"),
+            dictionary("CONTROL_TYPE", "ALLOW", "Ruxsat berish", "\u0420\u0443\u0445\u0441\u0430\u0442 \u0411\u0435\u0440\u0438\u0448", "\u0420\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435", "Allow"),
+            dictionary("CONTROL_TYPE", "BLOCK", "Taqiqlash", "\u0422\u0430\u049b\u0438\u049b\u043b\u0430\u0448", "\u0417\u0430\u043f\u0440\u0435\u0442", "Block"),
+            dictionary("PROCESS_STAGE", "VERIFICATION", "Verifikatsiya", "\u0412\u0435\u0440\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f", "\u0412\u0435\u0440\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f", "Verification"),
+            dictionary("PROCESS_STAGE", "FORMALIZATION", "Rasmiylashtirish", "\u0420\u0430\u0441\u043c\u0438\u0439\u043b\u0430\u0448\u0442\u0438\u0440\u0438\u0448", "\u041e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435", "Formalization"),
+            dictionary("PROCESS_STAGE", "ACCEPTANCE", "Qabul qilish", "\u049a\u0430\u0431\u0443\u043b \u049b\u0438\u043b\u0438\u0448", "\u041f\u0440\u0438\u0435\u043c\u043a\u0430", "Acceptance"),
+            dictionary("DEPARTMENT", "RISK", "Risk boshqarmasi", "\u0420\u0438\u0441\u043a \u0431\u043e\u0448\u049b\u0430\u0440\u043c\u0430\u0441\u0438", "\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0440\u0438\u0441\u043a\u0430", "Risk Department"),
+            dictionary("DEPARTMENT", "CUSTOMS", "Bojxona nazorati", "\u0411\u043e\u0436\u0445\u043e\u043d\u0430 \u043d\u0430\u0437\u043e\u0440\u0430\u0442\u0438", "\u0422\u0430\u043c\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c", "Customs Control")
         );
 
         dictionaryEntryRepository.saveAll(entries);
@@ -203,6 +236,7 @@ public class DataSeeder implements CommandLineRunner {
 
         seedRequiredProcessStages();
         seedRequiredServers();
+        seedRequiredStates();
 
         if (classifierSystemTypeRepository.count() == 0) {
             seedRequiredSystemTypes();
@@ -259,15 +293,15 @@ public class DataSeeder implements CommandLineRunner {
         });
     }
 
-    private DictionaryEntryEntity dictionary(String category, String code, String uzLatn, String uzCyrl, String ru, String en) {
+    private DictionaryEntryEntity dictionary(String category, String code, String OZ, String UZ, String ru, String en) {
         return DictionaryEntryEntity.builder()
             .category(category)
             .code(code)
             .labels(Map.of(
-                "uzLatn", uzLatn,
-                "uzCyrl", uzCyrl,
-                "ru", ru,
-                "en", en
+                "OZ", OZ,
+                "UZ", UZ,
+                "RU", ru,
+                "EN", en
             ))
             .active(true)
             .build();
@@ -315,6 +349,63 @@ public class DataSeeder implements CommandLineRunner {
             classifierServerRepository.save(entity);
         });
     }
+
+    private void seedRequiredStates() {
+        REQUIRED_STATES.forEach(state -> {
+            var entity = classifierStateRepository.findByCodeIgnoreCaseAndLangCodeIgnoreCase(state.code(), state.lang())
+                .orElseGet(() -> ClassifierStateEntity.builder().code(state.code()).langCode(state.lang()).build());
+
+            entity.setCode(state.code());
+            entity.setLangCode(state.lang());
+            entity.setName(state.name());
+            entity.setActive(true);
+
+            classifierStateRepository.save(entity);
+        });
+    }
+
+    private void backfillControlStates() {
+        var defaultState = classifierStateRepository.findByCodeIgnoreCaseAndLangCodeIgnoreCase(DEFAULT_STATE_CODE, DEFAULT_STATE_LANG)
+            .map(state -> new StateSeed(state.getCode(), state.getLangCode(), state.getName()))
+            .orElse(new StateSeed(DEFAULT_STATE_CODE, DEFAULT_STATE_LANG, "Yangi"));
+
+        logicalControlRepository.findAll().forEach(control -> {
+            var changed = false;
+            if (control.getStateHistory() == null) {
+                control.setStateHistory(new ArrayList<>());
+                changed = true;
+            }
+
+            if (control.getCurrentStateCode() == null || control.getCurrentStateCode().isBlank()) {
+                control.setCurrentStateCode(defaultState.code());
+                changed = true;
+            }
+            if (control.getCurrentStateName() == null || control.getCurrentStateName().isBlank()) {
+                control.setCurrentStateName(defaultState.name());
+                changed = true;
+            }
+            if (control.getCurrentStateLang() == null || control.getCurrentStateLang().isBlank()) {
+                control.setCurrentStateLang(defaultState.lang());
+                changed = true;
+            }
+
+            if (control.getStateHistory().isEmpty()) {
+                control.getStateHistory().add(LogicalControlStateHistoryEntity.builder()
+                    .control(control)
+                    .controlUniqueNumber(control.getUniqueNumber())
+                    .stateCode(control.getCurrentStateCode())
+                    .stateName(control.getCurrentStateName())
+                    .stateLang(control.getCurrentStateLang())
+                    .build());
+                changed = true;
+            }
+
+            if (changed) {
+                logicalControlRepository.save(control);
+            }
+        });
+    }
+
 
     private ClassifierProcessStageEntity processStage(String name, String description) {
         return ClassifierProcessStageEntity.builder()
@@ -371,19 +462,22 @@ public class DataSeeder implements CommandLineRunner {
             .uniqueNumber(code.replace("MN", "UNQ"))
             .controlType(controlType)
             .processStage("Verifikatsiyadan o'tkazish")
-            .authorName("Admin User")
+            .authorName("system")
             .responsibleDepartment("Risk boshqarmasi")
             .status(LogicalControlEntity.ControlStatus.ACTIVE)
+            .currentStateCode("NEW")
+            .currentStateName("Yangi")
+            .currentStateLang("OZ")
             .suspendedUntil(LocalDateTime.now().plusDays(3))
             .messages(Map.of(
-                "uzLatn", "Shart bajarilmadi, deklaratsiyani qayta tekshiring",
-                "uzCyrl", "Р РЃР В°РЎР‚РЎвЂљ Р В±Р В°Р В¶Р В°РЎР‚Р С‘Р В»Р СР В°Р Т‘Р С‘, Р Т‘Р ВµР С”Р В»Р В°РЎР‚Р В°РЎвЂ Р С‘РЎРЏР Р…Р С‘ РўвЂєР В°Р в„–РЎвЂљР В° РЎвЂљР ВµР С”РЎв‚¬Р С‘РЎР‚Р С‘Р Р…Р С–",
-                "ru", "Р Р€РЎРѓР В»Р С•Р Р†Р С‘Р Вµ Р Р…Р Вµ Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С•, Р С—РЎР‚Р С•Р Р†Р ВµРЎР‚РЎРЉРЎвЂљР Вµ Р Т‘Р ВµР С”Р В»Р В°РЎР‚Р В°РЎвЂ Р С‘РЎР‹ Р С—Р С•Р Р†РЎвЂљР С•РЎР‚Р Р…Р С•",
-                "en", "Condition failed, review declaration again"
+                "OZ", "Shart bajarilmadi, deklaratsiyani qayta tekshiring",
+                "UZ", "\u0428\u0430\u0440\u0442 \u0431\u0430\u0436\u0430\u0440\u0438\u043b\u043c\u0430\u0434\u0438, \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u044f\u043d\u0438 \u049b\u0430\u0439\u0442\u0430 \u0442\u0435\u043a\u0448\u0438\u0440\u0438\u043d\u0433",
+                "RU", "\u0423\u0441\u043b\u043e\u0432\u0438\u0435 \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043e, \u043f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u044e \u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e",
+                "EN", "Condition failed, review declaration again"
             ))
             .phoneExtension(null)
             .priorityOrder(1)
-            .confidentialityLevel("INTERNAL")
+            .confidentialityLevel("NON_CONFIDENTIAL")
             .smsNotificationEnabled(true)
             .smsPhones(new ArrayList<>(List.of("+998901112233", "+998977778899")))
             .deploymentScope(deploymentScope)
@@ -397,6 +491,14 @@ public class DataSeeder implements CommandLineRunner {
             .conflictMonitoringEnabled(true)
             .ruleBuilderCanvas(builderCanvas(name))
             .build();
+
+        control.getStateHistory().add(LogicalControlStateHistoryEntity.builder()
+            .control(control)
+            .controlUniqueNumber(control.getUniqueNumber())
+            .stateCode("NEW")
+            .stateName("Yangi")
+            .stateLang("OZ")
+            .build());
 
         control.getRules().add(LogicalRuleEntity.builder()
             .control(control)
@@ -494,4 +596,6 @@ public class DataSeeder implements CommandLineRunner {
         );
     }
 }
+
+
 

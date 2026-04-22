@@ -1,12 +1,17 @@
 package uz.logicalcontrol.backend.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -15,8 +20,9 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+import uz.logicalcontrol.backend.persistence.converter.ObjectMapJsonConverter;
 
 @Getter
 @Setter
@@ -25,7 +31,9 @@ import org.hibernate.type.SqlTypes;
 @AllArgsConstructor
 @Entity
 @Table(name = "execution_logs")
-public class ExecutionLogEntity extends BaseEntity {
+@SQLDelete(sql = "update execution_logs set isdeleted = 1, deltime = current timestamp, updtime = current timestamp where id = ? and isdeleted = 0")
+@SQLRestriction("isdeleted = 0")
+public class ExecutionLogEntity extends AuditedUuidEntity {
 
     public enum ExecutionResult {
         POSITIVE,
@@ -36,7 +44,7 @@ public class ExecutionLogEntity extends BaseEntity {
     @JoinColumn(name = "control_id", nullable = false)
     private LogicalControlEntity control;
 
-    @Column(nullable = false)
+    @Column(name = "instime", nullable = false, insertable = false, updatable = false)
     private Instant instime;
 
     @Enumerated(EnumType.STRING)
@@ -54,8 +62,26 @@ public class ExecutionLogEntity extends BaseEntity {
     @Column(length = 140)
     private String matchedRuleName;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Lob
+    @Convert(converter = ObjectMapJsonConverter.class)
+    @Column(nullable = false)
     @lombok.Builder.Default
     private Map<String, Object> details = new LinkedHashMap<>();
+
+    @PrePersist
+    @PreUpdate
+    void syncExecutionTimeAlias() {
+        if (getInsTime() == null && instime != null) {
+            setInsTime(instime);
+        }
+
+        if (instime == null) {
+            instime = getInsTime();
+        }
+    }
+
+    @PostLoad
+    void hydrateExecutionTimeAlias() {
+        instime = getInsTime();
+    }
 }

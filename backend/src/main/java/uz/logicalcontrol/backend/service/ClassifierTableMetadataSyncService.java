@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,8 +25,8 @@ import uz.logicalcontrol.backend.config.SqlQueryRunnerProperties;
 @Service
 public class ClassifierTableMetadataSyncService {
 
-    private static final String CLASSIFIER_TABLES_NAME = "classifier_tables";
-    private static final String CLASSIFIER_TABLE_COLUMNS_NAME = "classifier_table_columns";
+    private static final String CLASSIFIER_TABLES_NAME = "biz_tables";
+    private static final String CLASSIFIER_TABLE_COLUMNS_NAME = "biz_table_columns";
     private static final String SYSTEM_TYPE_RW = "Temir yo'l (RW)";
     private static final String SYSTEM_TYPE_MB = "Yuksiz yoki yengil transport (MB)";
     private static final String SYSTEM_TYPE_EK = "Eksport uch qadam (EK)";
@@ -178,10 +179,14 @@ public class ClassifierTableMetadataSyncService {
                     c.column_name,
                     c.column_name_definition,
                     c.column_description
-                from classifier_tables t
-                left join classifier_table_columns c
+                from biz_tables t
+                left join biz_table_columns c
                     on c.classifier_table_id = t.id
-                order by lower(t.table_name), c.ordinal_position nulls last, lower(c.column_name)
+                order by
+                    lower(t.table_name),
+                    case when c.ordinal_position is null then 1 else 0 end,
+                    c.ordinal_position,
+                    lower(c.column_name)
             """,
             resultSet -> {
                 var tableId = UUID.fromString(resultSet.getString("table_id"));
@@ -290,7 +295,7 @@ public class ClassifierTableMetadataSyncService {
         if (insert) {
             jdbcTemplate.update(
                 """
-                    insert into classifier_tables (
+                    insert into biz_tables (
                         id,
                         table_name,
                         entity_name_definition,
@@ -298,7 +303,7 @@ public class ClassifierTableMetadataSyncService {
                         system_type
                     ) values (?, ?, ?, ?, ?)
                     """,
-                tableId,
+                toDbUuid(tableId),
                 tableName,
                 entityNameDefinition,
                 description,
@@ -309,20 +314,20 @@ public class ClassifierTableMetadataSyncService {
 
         jdbcTemplate.update(
             """
-                update classifier_tables
+                update biz_tables
                 set table_name = ?,
                     entity_name_definition = ?,
                     description = ?,
                     system_type = ?,
-                    updated_at = now()
+                    updated_at = current timestamp
                 where id = ?
                 """,
             tableName,
             entityNameDefinition,
             description,
-            systemType,
-            tableId
-        );
+                systemType,
+                toDbUuid(tableId)
+            );
     }
 
     private void upsertColumn(
@@ -341,7 +346,7 @@ public class ClassifierTableMetadataSyncService {
         if (insert) {
             jdbcTemplate.update(
                 """
-                    insert into classifier_table_columns (
+                    insert into biz_table_columns (
                         id,
                         classifier_table_id,
                         column_name,
@@ -354,15 +359,15 @@ public class ClassifierTableMetadataSyncService {
                         ordinal_position
                     ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                columnId,
-                tableId,
+                toDbUuid(columnId),
+                toDbUuid(tableId),
                 columnName,
                 columnNameDefinition,
                 columnType,
                 columnLength,
                 dataType,
                 columnDescription,
-                nullable,
+                toDbNullableFlag(nullable),
                 ordinalPosition
             );
             return;
@@ -370,7 +375,7 @@ public class ClassifierTableMetadataSyncService {
 
         jdbcTemplate.update(
             """
-                update classifier_table_columns
+                update biz_table_columns
                 set column_name = ?,
                     column_name_definition = ?,
                     column_type = ?,
@@ -379,7 +384,7 @@ public class ClassifierTableMetadataSyncService {
                     column_description = ?,
                     nullable = ?,
                     ordinal_position = ?,
-                    updated_at = now()
+                    updated_at = current timestamp
                 where id = ?
                 """,
             columnName,
@@ -388,18 +393,29 @@ public class ClassifierTableMetadataSyncService {
             columnLength,
             dataType,
             columnDescription,
-            nullable,
+            toDbNullableFlag(nullable),
             ordinalPosition,
-            columnId
+            toDbUuid(columnId)
         );
     }
 
     private void deleteColumn(UUID columnId) {
-        jdbcTemplate.update("delete from classifier_table_columns where id = ?", columnId);
+        jdbcTemplate.update("delete from biz_table_columns where id = ?", toDbUuid(columnId));
     }
 
     private void deleteTable(UUID tableId) {
-        jdbcTemplate.update("delete from classifier_tables where id = ?", tableId);
+        jdbcTemplate.update("delete from biz_tables where id = ?", toDbUuid(tableId));
+    }
+
+    private String toDbUuid(UUID id) {
+        return id == null ? null : id.toString();
+    }
+
+    private Integer toDbNullableFlag(Boolean nullable) {
+        if (nullable == null) {
+            return null;
+        }
+        return nullable ? 1 : 0;
     }
 
     private boolean classifierTableMetadataTablesExist() {
@@ -407,20 +423,67 @@ public class ClassifierTableMetadataSyncService {
     }
 
     private boolean tableExists(String tableName) {
-        var exists = jdbcTemplate.queryForObject(
-            """
-                select exists (
-                    select 1
-                    from information_schema.tables
-                    where table_schema not in ('information_schema', 'pg_catalog')
-                      and lower(table_name) = ?
-                )
-                """,
-            Boolean.class,
-            tableName
-        );
-
+        var exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) connection -> metadataTableExists(connection, tableName));
         return Boolean.TRUE.equals(exists);
+    }
+
+    private boolean metadataTableExists(Connection connection, String tableName) throws SQLException {
+        var metadata = connection.getMetaData();
+
+        for (var schemaPattern : resolveSchemaPatterns(connection)) {
+            for (var tablePattern : resolveIdentifierPatterns(tableName)) {
+                try (ResultSet resultSet = metadata.getTables(null, schemaPattern, tablePattern, new String[] {"TABLE"})) {
+                    if (resultSet.next()) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private List<String> resolveSchemaPatterns(Connection connection) throws SQLException {
+        var patterns = new ArrayList<String>();
+        addSchemaPattern(patterns, connection.getSchema());
+        addSchemaPattern(patterns, connection.getMetaData().getUserName());
+        if (!patterns.contains(null)) {
+            patterns.add(null);
+        }
+        return patterns;
+    }
+
+    private void addSchemaPattern(List<String> patterns, String candidate) {
+        var normalized = trimToNull(candidate);
+        if (normalized == null) {
+            return;
+        }
+
+        if (!patterns.contains(normalized)) {
+            patterns.add(normalized);
+        }
+
+        var upperCase = normalized.toUpperCase(Locale.ROOT);
+        if (!patterns.contains(upperCase)) {
+            patterns.add(upperCase);
+        }
+    }
+
+    private List<String> resolveIdentifierPatterns(String identifier) {
+        var patterns = new ArrayList<String>();
+        var normalized = trimToNull(identifier);
+        if (normalized == null) {
+            return patterns;
+        }
+
+        patterns.add(normalized);
+
+        var upperCase = normalized.toUpperCase(Locale.ROOT);
+        if (!patterns.contains(upperCase)) {
+            patterns.add(upperCase);
+        }
+
+        return patterns;
     }
 
     private HikariDataSource getOrCreateDataSource() {

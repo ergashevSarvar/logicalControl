@@ -31,23 +31,13 @@ import { duplicateControl, fetchControls } from "@/lib/api";
 import {
   classifierQueryKeys,
   getClassifierProcessStages,
+  getClassifierStates,
   getClassifierSystemTypes,
 } from "@/lib/classifiers";
-import type { ControlDirection, ControlSystem, ControlType, DeploymentScope } from "@/lib/types";
+import { normalizeConfidentialityLevelKey, type ControlDirection, type ControlSystem, type ControlType, type DeploymentScope, type LocaleCode } from "@/lib/types";
 import { cn, formatIsoDate } from "@/lib/utils";
 
 const ALL_FILTER_VALUE = "ALL" as const;
-
-const scopeLabels: Record<DeploymentScope, string> = {
-  INTERNAL: "Ichki",
-  EXTERNAL: "Tashqi",
-  HYBRID: "Aralash",
-};
-
-const directionLabels: Record<ControlDirection, string> = {
-  ENTRY: "Kirish",
-  EXIT: "Chiqish",
-};
 
 function normalizeMultiValueSelection<T extends string>(
   currentValues: T[],
@@ -91,8 +81,38 @@ function formatDateRange(startDate: string | null, finishDate: string | null) {
   return `${formatDate(startDate)} - ${formatDate(finishDate)}`;
 }
 
+function resolveStatePalette(stateCode: string | null | undefined) {
+  switch (stateCode?.trim().toUpperCase()) {
+    case "APPROVED":
+      return {
+        dotClassName: "bg-primary",
+        textClassName: "text-primary",
+      };
+    case "APPROVED_BY_DEPARTMENT":
+      return {
+        dotClassName: "bg-sky-500",
+        textClassName: "text-sky-700 dark:text-sky-300",
+      };
+    case "SAVED":
+      return {
+        dotClassName: "bg-emerald-500",
+        textClassName: "text-emerald-700 dark:text-emerald-300",
+      };
+    case "NEW":
+      return {
+        dotClassName: "bg-sky-500",
+        textClassName: "text-sky-700 dark:text-sky-300",
+      };
+    default:
+      return {
+        dotClassName: "bg-slate-400 dark:bg-slate-500",
+        textClassName: "text-slate-700 dark:text-slate-300",
+      };
+  }
+}
+
 function isConfidential(level: string | null | undefined) {
-  return level?.trim().toLowerCase() === "maxfiy";
+  return normalizeConfidentialityLevelKey(level) === "CONFIDENTIAL";
 }
 
 function buildPaginationItems(currentPage: number, totalPages: number) {
@@ -235,9 +255,89 @@ function MultiSelectFilter({
 }
 
 export function ControlsListPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const pageText = {
+    title: {
+      OZ: "Mantiqiy nazoratlar",
+      UZ: "Мантиқий назоратлар",
+      RU: "Логические контроли",
+      EN: "Logical controls",
+    },
+    duration: {
+      OZ: "Amal qilish muddati",
+      UZ: "Амал қилиш муддати",
+      RU: "Срок действия",
+      EN: "Validity period",
+    },
+    typeAndStage: {
+      OZ: "Turi va bosqichi",
+      UZ: "Тури ва босқичи",
+      RU: "Тип и этап",
+      EN: "Type and stage",
+    },
+    loadError: {
+      OZ: "Ma'lumotlarni yuklab bo'lmadi",
+      UZ: "Маълумотларни юклаб бўлмади",
+      RU: "Не удалось загрузить данные",
+      EN: "Failed to load data",
+    },
+    confidential: {
+      OZ: "Maxfiy",
+      UZ: "Махфий",
+      RU: "Конфиденциально",
+      EN: "Confidential",
+    },
+    confidentialTitle: {
+      OZ: "Maxfiy mantiqiy nazorat",
+      UZ: "Махфий мантиқий назорат",
+      RU: "Конфиденциальный логический контроль",
+      EN: "Confidential logical control",
+    },
+    showing: {
+      OZ: "ko'rsatilmoqda",
+      UZ: "кўрсатилмоқда",
+      RU: "показано",
+      EN: "shown",
+    },
+    previous: {
+      OZ: "Oldingi",
+      UZ: "Олдинги",
+      RU: "Назад",
+      EN: "Previous",
+    },
+    next: {
+      OZ: "Keyingi",
+      UZ: "Кейинги",
+      RU: "Далее",
+      EN: "Next",
+    },
+    countSuffix: {
+      OZ: "ta",
+      UZ: "та",
+      RU: "шт.",
+      EN: "items",
+    },
+    controlColumn: {
+      OZ: "Mantiqiy nazorat",
+      UZ: "Мантиқий назорат",
+      RU: "Логический контроль",
+      EN: "Logical control",
+    },
+  } as const;
+  const localizedScopeLabels: Record<DeploymentScope, string> = {
+    INTERNAL: t("editor.options.internal"),
+    EXTERNAL: t("editor.options.external"),
+    HYBRID: t("editor.options.hybrid"),
+  };
+  const localizedDirectionLabels: Record<ControlDirection, string> = {
+    ENTRY: currentLocale === "RU" ? "Вход" : currentLocale === "EN" ? "Entry" : currentLocale === "UZ" ? "Кириш" : "Kirish",
+    EXIT: currentLocale === "RU" ? "Выход" : currentLocale === "EN" ? "Exit" : currentLocale === "UZ" ? "Чиқиш" : "Chiqish",
+  };
   const [search, setSearch] = useState("");
   const [deploymentScope, setDeploymentScope] = useState<Array<DeploymentScope | typeof ALL_FILTER_VALUE>>([ALL_FILTER_VALUE]);
   const [directionType, setDirectionType] = useState<Array<ControlDirection | typeof ALL_FILTER_VALUE>>([ALL_FILTER_VALUE]);
@@ -256,22 +356,25 @@ export function ControlsListPage() {
   const controlTypeLabel = t("controls.filters.controlType", { defaultValue: "Mantiqiy nazorat turi" });
   const processStageLabel = t("controls.filters.processStage", { defaultValue: "Mantiqiy nazorat bosqichi" });
   const resetFiltersLabel = t("controls.filters.reset", { defaultValue: "Filtrlarni tozalash" });
+  const editActionLabel = t("common.edit");
+  const builderActionLabel = t("ruleBuilder.title", { defaultValue: "Builder" });
+  const duplicateActionLabel = t("common.duplicate");
 
   const deploymentScopeOptions: Array<{ value: DeploymentScope | typeof ALL_FILTER_VALUE; label: string }> = [
     { value: ALL_FILTER_VALUE, label: allLabel },
-    { value: "INTERNAL", label: "Ichki" },
-    { value: "EXTERNAL", label: "Tashqi" },
+    { value: "INTERNAL", label: t("editor.options.internal") },
+    { value: "EXTERNAL", label: t("editor.options.external") },
   ];
   const directionTypeOptions: Array<{ value: ControlDirection | typeof ALL_FILTER_VALUE; label: string }> = [
     { value: ALL_FILTER_VALUE, label: allLabel },
-    { value: "ENTRY", label: "Kirish" },
-    { value: "EXIT", label: "Chiqish" },
+    { value: "ENTRY", label: currentLocale === "RU" ? "Вход" : currentLocale === "EN" ? "Entry" : currentLocale === "UZ" ? "Кириш" : "Kirish" },
+    { value: "EXIT", label: currentLocale === "RU" ? "Выход" : currentLocale === "EN" ? "Exit" : currentLocale === "UZ" ? "Чиқиш" : "Chiqish" },
   ];
   const controlTypeOptions: Array<{ value: ControlType | typeof ALL_FILTER_VALUE; label: string }> = [
     { value: ALL_FILTER_VALUE, label: allLabel },
-    { value: "BLOCK", label: "Taqiqlash" },
-    { value: "WARNING", label: "Ogohlantirish" },
-    { value: "ALLOW", label: "Istisno" },
+    { value: "BLOCK", label: t("editor.options.block") },
+    { value: "WARNING", label: t("editor.options.warning") },
+    { value: "ALLOW", label: t("editor.options.allow") },
   ];
 
   const systemTypesQuery = useQuery({
@@ -283,6 +386,12 @@ export function ControlsListPage() {
   const processStagesQuery = useQuery({
     queryKey: classifierQueryKeys.processStages,
     queryFn: getClassifierProcessStages,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
+  const statesQuery = useQuery({
+    queryKey: classifierQueryKeys.states(currentLocale),
+    queryFn: () => getClassifierStates(currentLocale),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 1000 * 60 * 60,
   });
@@ -299,6 +408,15 @@ export function ControlsListPage() {
   const availableProcessStages = useMemo(
     () => (processStagesQuery.data ?? []).filter((item) => item.active).map((item) => item.name),
     [processStagesQuery.data],
+  );
+  const stateLabels = useMemo(
+    () =>
+      new Map(
+        (statesQuery.data ?? [])
+          .filter((item) => item.active)
+          .map((item) => [item.code, item.name] as const),
+      ),
+    [statesQuery.data],
   );
 
   useEffect(() => {
@@ -404,7 +522,7 @@ export function ControlsListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Mantiqiy nazoratlar (${totalRows} ta)`}
+        title={`${pageText.title[currentLocale]} (${totalRows} ${pageText.countSuffix[currentLocale]})`}
         titleClassName="text-[1.6rem] md:text-[1.9rem]"
         showLogo={false}
         actions={
@@ -504,31 +622,32 @@ export function ControlsListPage() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_var(--border)]">
                 <TableRow>
-                  <TableHead>Mantiqiy nazorat</TableHead>
-                  <TableHead>Tizim</TableHead>
-                  <TableHead>Amal qilish muddati</TableHead>
-                  <TableHead>Turi va bosqichi</TableHead>
-                  <TableHead>{t("common.actions")}</TableHead>
+                  <TableHead>{pageText.controlColumn[currentLocale]}</TableHead>
+                  <TableHead className="min-w-[220px]">{t("common.status")}</TableHead>
+                  <TableHead className="min-w-[180px]">{t("common.system")}</TableHead>
+                  <TableHead>{pageText.duration[currentLocale]}</TableHead>
+                  <TableHead>{pageText.typeAndStage[currentLocale]}</TableHead>
+                  <TableHead className="w-[88px] text-center">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {controlsQuery.isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
                       {t("common.loading")}
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {controlsQuery.isError ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-destructive">
-                      Ma'lumotlarni yuklab bo'lmadi
+                    <TableCell colSpan={6} className="py-10 text-center text-sm text-destructive">
+                      {pageText.loadError[currentLocale]}
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {!controlsQuery.isLoading && !controlsQuery.isError && rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
                       {t("common.noData")}
                     </TableCell>
                   </TableRow>
@@ -548,22 +667,39 @@ export function ControlsListPage() {
                           {isConfidential(item.confidentialityLevel) ? (
                             <span
                               className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700"
-                              title="Maxfiy mantiqiy nazorat"
+                              title={pageText.confidentialTitle[currentLocale]}
                             >
                               <Shield className="size-3.5" />
-                              Maxfiy
+                              {pageText.confidential[currentLocale]}
                             </span>
                           ) : null}
                         </div>
                         <p className="font-semibold text-foreground">{item.name}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="align-top">
+                    <TableCell className="min-w-[220px] align-top">
+                      {(() => {
+                        const statePalette = resolveStatePalette(item.currentStateCode);
+                        const stateLabel =
+                          stateLabels.get(item.currentStateCode || "NEW") ??
+                          item.currentStateName ??
+                          stateLabels.get("NEW") ??
+                          "NEW";
+
+                        return (
+                          <div className={cn("flex items-start gap-2.5 pt-0.5", statePalette.textClassName)}>
+                            <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", statePalette.dotClassName)} />
+                            <span className="text-sm font-semibold leading-5">{stateLabel}</span>
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell className="min-w-[180px] align-top">
                       <div className="space-y-2">
                         <SystemBadge system={item.systemName} />
                         <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary">{scopeLabels[item.deploymentScope]}</Badge>
-                          {item.directionType ? <Badge variant="outline">{directionLabels[item.directionType]}</Badge> : null}
+                          <Badge variant="secondary">{localizedScopeLabels[item.deploymentScope]}</Badge>
+                          {item.directionType ? <Badge variant="outline">{localizedDirectionLabels[item.directionType]}</Badge> : null}
                         </div>
                       </div>
                     </TableCell>
@@ -576,24 +712,35 @@ export function ControlsListPage() {
                         <p className="text-sm text-muted-foreground">{item.processStage}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="align-top">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => navigate(`/controls/${item.id}/edit`)}>
+                    <TableCell className="w-[88px] align-top">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title={editActionLabel}
+                          aria-label={editActionLabel}
+                          onClick={() => navigate(`/controls/${item.id}/edit`)}
+                        >
                           <PencilLine className="size-4" />
-                          {t("common.edit")}
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => navigate(`/controls/${item.id}/builder`)}>
-                          <Route className="size-4" />
-                          Builder
                         </Button>
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="ghost"
+                          size="icon-sm"
+                          title={builderActionLabel}
+                          aria-label={builderActionLabel}
+                          onClick={() => navigate(`/controls/${item.id}/builder`)}
+                        >
+                          <Route className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title={duplicateActionLabel}
+                          aria-label={duplicateActionLabel}
                           onClick={() => openDuplicateDialog(item.id, item.uniqueNumber || item.code)}
                           disabled={duplicateMutation.isPending}
                         >
                           <Copy className="size-4" />
-                          {t("common.duplicate")}
                         </Button>
                       </div>
                     </TableCell>
@@ -605,8 +752,8 @@ export function ControlsListPage() {
           <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               {totalRows === 0
-                ? "0 / 0 ko'rsatilmoqda"
-                : `${pageStartIndex + 1}-${pageEndIndex} / ${totalRows} ko'rsatilmoqda`}
+                ? `0 / 0 ${pageText.showing[currentLocale]}`
+                : `${pageStartIndex + 1}-${pageEndIndex} / ${totalRows} ${pageText.showing[currentLocale]}`}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -617,7 +764,7 @@ export function ControlsListPage() {
                 disabled={safeCurrentPage === 1}
               >
                 <ChevronLeft className="size-4" />
-                Oldingi
+                {pageText.previous[currentLocale]}
               </Button>
               <div className="flex flex-wrap items-center gap-1">
                 {paginationItems.map((item, index) =>
@@ -649,7 +796,7 @@ export function ControlsListPage() {
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={safeCurrentPage === totalPages}
               >
-                Keyingi
+                {pageText.next[currentLocale]}
                 <ChevronRight className="size-4" />
               </Button>
             </div>
@@ -709,3 +856,4 @@ export function ControlsListPage() {
     </div>
   );
 }
+

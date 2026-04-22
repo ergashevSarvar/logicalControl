@@ -15,8 +15,10 @@ import {
   Search,
   Server,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
 import { Badge } from "@/components/ui/badge";
@@ -40,16 +42,22 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createClassifierDepartment,
   createClassifierProcessStage,
+  createClassifierRole,
   createClassifierServer,
+  createClassifierState,
   createClassifierSystemType,
   deleteClassifierDepartment,
   deleteClassifierProcessStage,
+  deleteClassifierRole,
   deleteClassifierServer,
+  deleteClassifierState,
   deleteClassifierSystemType,
   deleteClassifierTable,
   updateClassifierDepartment,
   updateClassifierProcessStage,
+  updateClassifierRole,
   updateClassifierServer,
+  updateClassifierState,
   updateClassifierSystemType,
   updateClassifierTable,
 } from "@/lib/api";
@@ -57,11 +65,14 @@ import {
   classifierQueryKeys,
   getClassifierDepartments,
   getClassifierProcessStages,
+  getClassifierRoles,
   getClassifierServers,
+  getClassifierStates,
   getClassifierSystemTypes,
   getClassifierTables,
   sortClassifierDepartments,
   sortClassifierProcessStages,
+  sortClassifierRoles,
   sortClassifierServers,
   sortClassifierSystemTypes,
   sortClassifierTables,
@@ -71,30 +82,51 @@ import type {
   ClassifierDepartmentRequest,
   ClassifierProcessStage,
   ClassifierProcessStageRequest,
+  ClassifierRole,
+  ClassifierRoleRequest,
   ClassifierServer,
   ClassifierServerRequest,
+  ClassifierState,
+  ClassifierStateRequest,
   ClassifierSystemType,
   ClassifierSystemTypeRequest,
   ClassifierTable,
   ClassifierTableColumn,
   ClassifierTableRequest,
+  LocaleCode,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type TabValue = "departments" | "stages" | "systemTypes" | "tables" | "servers";
+type TabValue = "departments" | "stages" | "systemTypes" | "tables" | "servers" | "roles" | "states";
 type DepartmentTypeFilter = "all" | (typeof departmentTypeOptions)[number];
 type SystemTypeScopeFilter = "all" | "Ichki" | "Tashqi";
+type StateLangFilter = "all" | LocaleCode;
 type TableSystemFilterValue = string;
 type EditorState =
   | { kind: "department"; mode: "create" | "edit"; id?: string }
   | { kind: "stage"; mode: "create" | "edit"; id?: string }
   | { kind: "systemType"; mode: "create" | "edit"; id?: string }
+  | { kind: "role"; mode: "create" | "edit"; id?: string }
+  | { kind: "state"; mode: "create" | "edit"; id?: string }
   | { kind: "server"; mode: "create" | "edit"; id?: string };
-type DeleteState = { kind: "department" | "stage" | "systemType" | "server" | "table"; id: string; label: string };
+type DeleteState = { kind: "department" | "stage" | "systemType" | "server" | "table" | "role" | "state"; id: string; label: string };
 
 const departmentTypeOptions = ["Boshqarma", "Bo'lim", "Sektor", "Laboratoriya"] as const;
 const systemScopeOptions = ["Ichki", "Tashqi"] as const;
+const stateLanguageOptions: LocaleCode[] = ["OZ", "UZ", "RU", "EN"];
 const ALL_FILTER_VALUE = "ALL";
+const stateLanguageLabels: Record<LocaleCode, string> = {
+  OZ: "O'zbek tili",
+  UZ: "Ўзбек тили",
+  RU: "Русский язык",
+  EN: "English language",
+};
+const stateLanguageShortLabels: Record<LocaleCode, string> = {
+  OZ: "UZ",
+  UZ: "ЎЗ",
+  RU: "РУ",
+  EN: "EN",
+};
 
 function createEmptyDepartmentForm(): ClassifierDepartmentRequest {
   return {
@@ -128,6 +160,22 @@ function createEmptyServerForm(): ClassifierServerRequest {
   };
 }
 
+function createEmptyRoleForm(): ClassifierRoleRequest {
+  return {
+    name: "",
+    active: true,
+  };
+}
+
+function createEmptyStateForm(locale: LocaleCode = "OZ"): ClassifierStateRequest {
+  return {
+    code: "",
+    name: "",
+    lang: locale,
+    active: true,
+  };
+}
+
 function cloneClassifierTable(table: ClassifierTable): ClassifierTable {
   return {
     ...table,
@@ -155,13 +203,30 @@ function extractErrorMessage(error: unknown, fallback: string) {
 }
 
 function StatusChip({ active }: { active: boolean }) {
+  const { i18n } = useTranslation();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const statusLabel = active
+    ? ({
+        OZ: "Faol",
+        UZ: "Фаол",
+        RU: "Активный",
+        EN: "Active",
+      } as const)[currentLocale]
+    : ({
+        OZ: "Nofaol",
+        UZ: "Нофаол",
+        RU: "Неактивный",
+        EN: "Inactive",
+      } as const)[currentLocale];
   return active ? (
     <Badge className="h-7 rounded-full bg-emerald-500/12 px-3 text-emerald-600 hover:bg-emerald-500/12 dark:text-emerald-300">
-      Faol
+      {statusLabel}
     </Badge>
   ) : (
     <Badge className="h-7 rounded-full bg-slate-500/12 px-3 text-slate-500 hover:bg-slate-500/12 dark:text-slate-300">
-      Nofaol
+      {statusLabel}
     </Badge>
   );
 }
@@ -280,14 +345,67 @@ function DepartmentTypeFilterTabs({
   );
 }
 
+function StateLanguageFilterTabs({
+  value,
+  onChange,
+  allLabel,
+}: {
+  value: StateLangFilter;
+  onChange: (value: StateLangFilter) => void;
+  allLabel: string;
+}) {
+  const options: Array<{ value: StateLangFilter; label: string }> = [
+    { value: "all", label: allLabel },
+    ...stateLanguageOptions.map((langCode) => ({ value: langCode, label: stateLanguageShortLabels[langCode] })),
+  ];
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Status tillari bo'yicha filtrlash"
+      className="inline-flex h-11 items-center gap-2 rounded-[16px] border border-border/70 bg-background/80 p-1"
+    >
+      {options.map((option) => {
+        const selected = value === option.value;
+        return (
+          <Button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            variant={selected ? "default" : "ghost"}
+            className={cn(
+              "h-9 rounded-[12px] px-4 text-sm shadow-none",
+              !selected && "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { i18n } = useTranslation();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const placeholder = ({
+    OZ: "Qidirish...",
+    UZ: "Қидириш...",
+    RU: "Поиск...",
+    EN: "Search...",
+  } as const)[currentLocale];
   return (
     <div className="relative w-full xl:w-[20rem]">
       <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Qidirish..."
+        placeholder={placeholder}
         className="h-11 rounded-[14px] pl-10"
       />
     </div>
@@ -337,6 +455,10 @@ function AutocompleteMultiSelectFilter({
   allLabel: string;
   placeholder: string;
 }) {
+  const { i18n } = useTranslation();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -372,8 +494,14 @@ function AutocompleteMultiSelectFilter({
       return selectedLabels.join(", ");
     }
 
-    return `${selectedLabels.length} ta tanlandi`;
-  }, [allLabel, options, value]);
+    return currentLocale === "RU"
+      ? `Выбрано: ${selectedLabels.length}`
+      : currentLocale === "EN"
+        ? `${selectedLabels.length} selected`
+        : currentLocale === "UZ"
+          ? `${selectedLabels.length} та танланди`
+          : `${selectedLabels.length} ta tanlandi`;
+  }, [allLabel, currentLocale, options, value]);
 
   return (
     <div ref={containerRef} className="relative w-full xl:w-[22rem]">
@@ -403,7 +531,9 @@ function AutocompleteMultiSelectFilter({
 
           <div className="max-h-[19.5rem] overflow-y-auto p-2">
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-6 text-center text-sm text-muted-foreground">Mos variant topilmadi</div>
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                {currentLocale === "RU" ? "Совпадений не найдено" : currentLocale === "EN" ? "No matching option found" : currentLocale === "UZ" ? "Мос вариант топилмади" : "Mos variant topilmadi"}
+              </div>
             ) : (
               filteredOptions.map((option) => {
                 const checked = value.includes(option.value);
@@ -448,6 +578,12 @@ function ActionButtons({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { i18n } = useTranslation();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const editSuffix = currentLocale === "RU" ? "редактировать" : currentLocale === "EN" ? "edit" : currentLocale === "UZ" ? "таҳрирлаш" : "tahrirlash";
+  const deleteSuffix = currentLocale === "RU" ? "удалить" : currentLocale === "EN" ? "delete" : currentLocale === "UZ" ? "ўчириш" : "o'chirish";
   return (
     <div className="flex items-center justify-end gap-2">
       <Button
@@ -456,7 +592,7 @@ function ActionButtons({
         size="icon-sm"
         className="rounded-full text-primary hover:bg-primary/10 hover:text-primary"
         onClick={onEdit}
-        title={`${label} ni tahrirlash`}
+        title={`${label} ${editSuffix}`}
       >
         <Pencil className="size-4" />
       </Button>
@@ -466,7 +602,7 @@ function ActionButtons({
         size="icon-sm"
         className="rounded-full text-red-500 hover:bg-red-500/10 hover:text-red-600"
         onClick={onDelete}
-        title={`${label} ni o'chirish`}
+        title={`${label} ${deleteSuffix}`}
       >
         <Trash2 className="size-4" />
       </Button>
@@ -521,6 +657,19 @@ function ModalShell({
 }
 
 export function ClassifiersPage() {
+  const { i18n } = useTranslation();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const pageText = {
+    departmentsTab: { OZ: "Boshqarmalar ro'yxati", UZ: "Бошқармалар рўйхати", RU: "Список подразделений", EN: "Departments" },
+    stagesTab: { OZ: "Mantiqiy nazorat bosqichlar", UZ: "Мантиқий назорат босқичлар", RU: "Этапы логического контроля", EN: "Control stages" },
+    systemTypesTab: { OZ: "Tizim turlari", UZ: "Тизим турлари", RU: "Типы систем", EN: "System types" },
+    tablesTab: { OZ: "Jadvallar", UZ: "Жадваллар", RU: "Таблицы", EN: "Tables" },
+    serversTab: { OZ: "Serverlar", UZ: "Серверлар", RU: "Серверы", EN: "Servers" },
+    all: { OZ: "Barchasi", UZ: "Барчаси", RU: "Все", EN: "All" },
+    statesTab: { OZ: "Statuslar", UZ: "Статуслар", RU: "Статусы", EN: "Statuses" },
+  } as const;
   const [activeTab, setActiveTab] = useState<TabValue>("departments");
   const [departmentQuery, setDepartmentQuery] = useState("");
   const [departmentTypeFilter, setDepartmentTypeFilter] = useState<DepartmentTypeFilter>("all");
@@ -529,6 +678,9 @@ export function ClassifiersPage() {
   const [systemTypeScopeFilter, setSystemTypeScopeFilter] = useState<SystemTypeScopeFilter>("all");
   const [tableQuery, setTableQuery] = useState("");
   const [serverQuery, setServerQuery] = useState("");
+  const [roleQuery, setRoleQuery] = useState("");
+  const [stateQuery, setStateQuery] = useState("");
+  const [stateLangFilter, setStateLangFilter] = useState<StateLangFilter>("all");
   const [tableSystemTypeFilter, setTableSystemTypeFilter] = useState<TableSystemFilterValue[]>([ALL_FILTER_VALUE]);
   const [selectedTable, setSelectedTable] = useState<ClassifierTable | null>(null);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
@@ -540,6 +692,8 @@ export function ClassifiersPage() {
   const [stageForm, setStageForm] = useState<ClassifierProcessStageRequest>(createEmptyStageForm);
   const [systemTypeForm, setSystemTypeForm] = useState<ClassifierSystemTypeRequest>(createEmptySystemTypeForm);
   const [serverForm, setServerForm] = useState<ClassifierServerRequest>(createEmptyServerForm);
+  const [roleForm, setRoleForm] = useState<ClassifierRoleRequest>(createEmptyRoleForm);
+  const [stateForm, setStateForm] = useState<ClassifierStateRequest>(() => createEmptyStateForm(currentLocale));
   const queryClient = useQueryClient();
 
   const departmentsQuery = useQuery({
@@ -566,6 +720,18 @@ export function ClassifiersPage() {
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 1000 * 60 * 60,
   });
+  const rolesQuery = useQuery({
+    queryKey: classifierQueryKeys.roles,
+    queryFn: getClassifierRoles,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
+  const statesQuery = useQuery({
+    queryKey: classifierQueryKeys.states(stateLangFilter === "all" ? undefined : stateLangFilter),
+    queryFn: () => getClassifierStates(stateLangFilter === "all" ? undefined : stateLangFilter),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 1000 * 60 * 60,
+  });
   const tablesQuery = useQuery({
     queryKey: classifierQueryKeys.tables,
     queryFn: getClassifierTables,
@@ -575,47 +741,61 @@ export function ClassifiersPage() {
 
   useEffect(() => {
     if (departmentsQuery.error) {
-      toast.error(extractErrorMessage(departmentsQuery.error, "Boshqarmalarni yuklab bo'lmadi."));
+      toast.error(extractErrorMessage(departmentsQuery.error, currentLocale === "RU" ? "Не удалось загрузить подразделения." : currentLocale === "EN" ? "Failed to load departments." : currentLocale === "UZ" ? "Бошқармаларни юклаб бўлмади." : "Boshqarmalarni yuklab bo'lmadi."));
     }
   }, [departmentsQuery.error]);
 
   useEffect(() => {
     if (stagesQuery.error) {
-      toast.error(extractErrorMessage(stagesQuery.error, "Bosqichlarni yuklab bo'lmadi."));
+      toast.error(extractErrorMessage(stagesQuery.error, currentLocale === "RU" ? "Не удалось загрузить этапы." : currentLocale === "EN" ? "Failed to load stages." : currentLocale === "UZ" ? "Босқичларни юклаб бўлмади." : "Bosqichlarni yuklab bo'lmadi."));
     }
   }, [stagesQuery.error]);
 
   useEffect(() => {
     if (systemTypesQuery.error) {
-      toast.error(extractErrorMessage(systemTypesQuery.error, "Tizim turlarini yuklab bo'lmadi."));
+      toast.error(extractErrorMessage(systemTypesQuery.error, currentLocale === "RU" ? "Не удалось загрузить типы систем." : currentLocale === "EN" ? "Failed to load system types." : currentLocale === "UZ" ? "Тизим турларини юклаб бўлмади." : "Tizim turlarini yuklab bo'lmadi."));
     }
   }, [systemTypesQuery.error]);
 
   useEffect(() => {
     if (serversQuery.error) {
-      toast.error(extractErrorMessage(serversQuery.error, "Serverlarni yuklab bo'lmadi."));
+      toast.error(extractErrorMessage(serversQuery.error, currentLocale === "RU" ? "Не удалось загрузить серверы." : currentLocale === "EN" ? "Failed to load servers." : currentLocale === "UZ" ? "Серверларни юклаб бўлмади." : "Serverlarni yuklab bo'lmadi."));
     }
   }, [serversQuery.error]);
 
   useEffect(() => {
     if (tablesQuery.error) {
-      toast.error(extractErrorMessage(tablesQuery.error, "Jadvallarni yuklab bo'lmadi."));
+      toast.error(extractErrorMessage(tablesQuery.error, currentLocale === "RU" ? "Не удалось загрузить таблицы." : currentLocale === "EN" ? "Failed to load tables." : currentLocale === "UZ" ? "Жадвалларни юклаб бўлмади." : "Jadvallarni yuklab bo'lmadi."));
     }
   }, [tablesQuery.error]);
+
+  useEffect(() => {
+    if (rolesQuery.error) {
+      toast.error(extractErrorMessage(rolesQuery.error, currentLocale === "RU" ? "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЂРѕР»Рё." : currentLocale === "EN" ? "Failed to load roles." : currentLocale === "UZ" ? "Р РѕР»Р»Р°СЂРЅРё СЋРєР»Р°Р± Р±СћР»РјР°РґРё." : "Rollarni yuklab bo'lmadi."));
+    }
+  }, [rolesQuery.error]);
+
+  useEffect(() => {
+    if (statesQuery.error) {
+      toast.error(extractErrorMessage(statesQuery.error, currentLocale === "RU" ? "Не удалось загрузить статусы." : currentLocale === "EN" ? "Failed to load statuses." : currentLocale === "UZ" ? "Статусларни юклаб бўлмади." : "Statuslarni yuklab bo'lmadi."));
+    }
+  }, [currentLocale, statesQuery.error]);
 
   const departments = departmentsQuery.data ?? [];
   const stages = stagesQuery.data ?? [];
   const systemTypes = systemTypesQuery.data ?? [];
   const servers = serversQuery.data ?? [];
+  const roles = rolesQuery.data ?? [];
+  const states = statesQuery.data ?? [];
   const tables = tablesQuery.data ?? [];
   const tableSystemTypeOptions = useMemo(
-    () => [
-      { value: ALL_FILTER_VALUE, label: "Barchasi" },
+      () => [
+      { value: ALL_FILTER_VALUE, label: pageText.all[currentLocale] },
       ...[...new Set(tables.map((item) => item.systemType))]
         .sort((left, right) => left.localeCompare(right, "uz"))
         .map((item) => ({ value: item, label: item })),
     ],
-    [tables],
+    [currentLocale, pageText.all, tables],
   );
   const editableTableSystemTypeOptions = useMemo(() => {
     const baseOptions = [
@@ -694,6 +874,32 @@ export function ClassifiersPage() {
     );
   }, [serverQuery, servers]);
 
+  const filteredRoles = useMemo(() => {
+    const query = roleQuery.trim().toLocaleLowerCase();
+    if (!query) {
+      return roles;
+    }
+
+    return roles.filter((row) =>
+      `${row.name} ${row.active ? "faol" : "nofaol"}`
+        .toLocaleLowerCase()
+        .includes(query),
+    );
+  }, [roleQuery, roles]);
+
+  const filteredStates = useMemo(() => {
+    const query = stateQuery.trim().toLocaleLowerCase();
+    if (!query) {
+      return states;
+    }
+
+    return states.filter((row) =>
+      `${row.code} ${row.name} ${row.lang} ${row.active ? "faol" : "nofaol"}`
+        .toLocaleLowerCase()
+        .includes(query),
+    );
+  }, [stateQuery, states]);
+
   useEffect(() => {
     if (isAllFilterSelected(tableSystemTypeFilter)) {
       return;
@@ -731,6 +937,18 @@ export function ClassifiersPage() {
     if (activeTab === "servers") {
       setServerForm(createEmptyServerForm());
       setEditorState({ kind: "server", mode: "create" });
+      return;
+    }
+
+    if (activeTab === "roles") {
+      setRoleForm(createEmptyRoleForm());
+      setEditorState({ kind: "role", mode: "create" });
+      return;
+    }
+
+    if (activeTab === "states") {
+      setStateForm(createEmptyStateForm(currentLocale));
+      setEditorState({ kind: "state", mode: "create" });
       return;
     }
 
@@ -772,6 +990,24 @@ export function ClassifiersPage() {
       active: item.active,
     });
     setEditorState({ kind: "server", mode: "edit", id: item.id });
+  }
+
+  function openRoleEditor(item: ClassifierRole) {
+    setRoleForm({
+      name: item.name,
+      active: item.active,
+    });
+    setEditorState({ kind: "role", mode: "edit", id: item.id });
+  }
+
+  function openStateEditor(item: ClassifierState) {
+    setStateForm({
+      code: item.code,
+      name: item.name,
+      lang: item.lang,
+      active: item.active,
+    });
+    setEditorState({ kind: "state", mode: "edit", id: item.id });
   }
 
   function openTableEditor(item: ClassifierTable) {
@@ -905,6 +1141,44 @@ export function ClassifiersPage() {
             ? "Tizim turi muvaffaqiyatli qo'shildi."
             : "Tizim turi muvaffaqiyatli yangilandi.",
         );
+      } else if (editorState.kind === "role") {
+        const payload = {
+          name: roleForm.name.trim(),
+          active: roleForm.active,
+        } satisfies ClassifierRoleRequest;
+
+        const saved = editorState.mode === "create"
+          ? await createClassifierRole(payload)
+          : await updateClassifierRole(editorState.id!, payload);
+
+        queryClient.setQueryData<ClassifierRole[]>(classifierQueryKeys.roles, (current = []) =>
+          sortClassifierRoles([...current.filter((item) => item.id !== saved.id), saved]),
+        );
+
+        toast.success(
+          editorState.mode === "create"
+            ? "Rol muvaffaqiyatli qo'shildi."
+            : "Rol muvaffaqiyatli yangilandi.",
+        );
+      } else if (editorState.kind === "state") {
+        const payload = {
+          code: stateForm.code.trim(),
+          name: stateForm.name.trim(),
+          lang: stateForm.lang,
+          active: stateForm.active,
+        } satisfies ClassifierStateRequest;
+
+        await (editorState.mode === "create"
+          ? createClassifierState(payload)
+          : updateClassifierState(editorState.id!, payload));
+
+        await queryClient.invalidateQueries({ queryKey: classifierQueryKeys.statesBase });
+
+        toast.success(
+          editorState.mode === "create"
+            ? "Status muvaffaqiyatli qo'shildi."
+            : "Status muvaffaqiyatli yangilandi.",
+        );
       } else {
         const payload = {
           name: serverForm.name.trim(),
@@ -938,7 +1212,11 @@ export function ClassifiersPage() {
               ? "Bosqich saqlanmadi."
               : editorState.kind === "systemType"
                 ? "Tizim turi saqlanmadi."
-                : "Server saqlanmadi.",
+                : editorState.kind === "role"
+                  ? "Rol saqlanmadi."
+                  : editorState.kind === "state"
+                    ? "Status saqlanmadi."
+                  : "Server saqlanmadi.",
         ),
       );
     } finally {
@@ -979,6 +1257,16 @@ export function ClassifiersPage() {
         );
         setSelectedTable((current) => (current?.id === deleteState.id ? null : current));
         toast.success("Jadval o'chirildi.");
+      } else if (deleteState.kind === "role") {
+        await deleteClassifierRole(deleteState.id);
+        queryClient.setQueryData<ClassifierRole[]>(classifierQueryKeys.roles, (current = []) =>
+          current.filter((item) => item.id !== deleteState.id),
+        );
+        toast.success("Rol o'chirildi.");
+      } else if (deleteState.kind === "state") {
+        await deleteClassifierState(deleteState.id);
+        await queryClient.invalidateQueries({ queryKey: classifierQueryKeys.statesBase });
+        toast.success("Status o'chirildi.");
       } else {
         await deleteClassifierServer(deleteState.id);
         queryClient.setQueryData<ClassifierServer[]>(classifierQueryKeys.servers, (current = []) =>
@@ -996,10 +1284,14 @@ export function ClassifiersPage() {
             ? "Boshqarma o'chirilmadi."
             : deleteState.kind === "stage"
               ? "Bosqich o'chirilmadi."
-              : deleteState.kind === "systemType"
-                ? "Tizim turi o'chirilmadi."
-                : deleteState.kind === "table"
-                  ? "Jadval o'chirilmadi."
+            : deleteState.kind === "systemType"
+              ? "Tizim turi o'chirilmadi."
+              : deleteState.kind === "table"
+                ? "Jadval o'chirilmadi."
+                : deleteState.kind === "role"
+                  ? "Rol o'chirilmadi."
+                  : deleteState.kind === "state"
+                    ? "Status o'chirilmadi."
                   : "Server o'chirilmadi.",
         ),
       );
@@ -1017,31 +1309,43 @@ export function ClassifiersPage() {
               value="departments"
               className="h-10 min-w-[13rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
             >
-              Boshqarmalar ro'yxati
+              {pageText.departmentsTab[currentLocale]}
             </TabsTrigger>
             <TabsTrigger
               value="stages"
               className="h-10 min-w-[15rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
             >
-              Mantiqiy nazorat bosqichlar
+              {pageText.stagesTab[currentLocale]}
             </TabsTrigger>
             <TabsTrigger
               value="systemTypes"
               className="h-10 min-w-[13rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
             >
-              Tizim turlari
+              {pageText.systemTypesTab[currentLocale]}
             </TabsTrigger>
             <TabsTrigger
               value="tables"
               className="h-10 min-w-[11rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
             >
-              Jadvallar
+              {pageText.tablesTab[currentLocale]}
             </TabsTrigger>
             <TabsTrigger
               value="servers"
               className="h-10 min-w-[11rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
             >
-              Serverlar
+              {pageText.serversTab[currentLocale]}
+            </TabsTrigger>
+            <TabsTrigger
+              value="roles"
+              className="h-10 min-w-[11rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
+            >
+              {currentLocale === "RU" ? "Роли" : currentLocale === "EN" ? "Roles" : currentLocale === "UZ" ? "Роллар" : "Rollar"}
+            </TabsTrigger>
+            <TabsTrigger
+              value="states"
+              className="h-10 min-w-[11rem] rounded-[14px] border border-transparent bg-white/52 px-5 text-sm font-semibold text-foreground/75 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.2)] backdrop-blur data-active:border-[color:rgba(var(--primary-rgb),0.12)] data-active:bg-[linear-gradient(180deg,rgba(var(--primary-rgb),0.12),rgba(var(--accent-rgb),0.08))] data-active:text-primary data-active:shadow-[0_16px_26px_-20px_rgba(var(--primary-rgb),0.26)]"
+            >
+              {pageText.statesTab[currentLocale]}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1481,6 +1785,168 @@ export function ClassifiersPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="roles">
+          <Card className="border-border/70 bg-card/90 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.2)]">
+            <CardContent className="space-y-5 p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <SectionHeader
+                  icon={Users}
+                  title={`${currentLocale === "RU" ? "Роли" : currentLocale === "EN" ? "Roles" : currentLocale === "UZ" ? "Роллар" : "Rollar"} (${filteredRoles.length} ta)`}
+                />
+                <SearchBox value={roleQuery} onChange={setRoleQuery} />
+              </div>
+
+              <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/70">
+                <ScrollArea className="h-[34rem]">
+                  <Table>
+                    <TableHeader className="bg-muted/40">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-16 px-5">No</TableHead>
+                        <TableHead className="min-w-[28rem]">Rol nomi</TableHead>
+                        <TableHead className="min-w-[8rem]">Holat</TableHead>
+                        <TableHead className="w-32 px-5 text-right">Amallar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rolesQuery.isLoading ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={4} className="h-[20rem] px-5">
+                            <div className="flex items-center justify-center gap-3 text-muted-foreground">
+                              <Loader2 className="size-4 animate-spin" />
+                              <span>Ma'lumotlar yuklanmoqda...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredRoles.length === 0 ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={4} className="px-0 py-0">
+                            <EmptyState
+                              title={currentLocale === "RU" ? "Роли не найдены" : currentLocale === "EN" ? "Roles were not found" : currentLocale === "UZ" ? "Роллар топилмади" : "Rollar topilmadi"}
+                              description={currentLocale === "RU" ? "Измените поиск или добавьте новую роль." : currentLocale === "EN" ? "Try another search or add a new role." : currentLocale === "UZ" ? "Қидирувни ўзгартиринг ёки янги рол қўшинг." : "Qidiruvni o'zgartirib ko'ring yoki yangi rol qo'shing."}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredRoles.map((row, index) => (
+                          <TableRow key={row.id} className="bg-transparent">
+                            <TableCell className="px-5 font-semibold text-muted-foreground">{index + 1}</TableCell>
+                            <TableCell className="py-4 whitespace-normal">
+                              <p className="max-w-[42rem] text-sm leading-6 font-medium text-foreground">{row.name}</p>
+                            </TableCell>
+                            <TableCell>
+                              <StatusChip active={row.active} />
+                            </TableCell>
+                            <TableCell className="px-5">
+                              <ActionButtons
+                                label={row.name}
+                                onEdit={() => openRoleEditor(row)}
+                                onDelete={() =>
+                                  setDeleteState({
+                                    kind: "role",
+                                    id: row.id,
+                                    label: row.name,
+                                  })
+                                }
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="states">
+          <Card className="border-border/70 bg-card/90 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.2)]">
+            <CardContent className="space-y-5 p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <SectionHeader
+                  icon={ClipboardList}
+                  title={`${pageText.statesTab[currentLocale]} (${filteredStates.length} ta)`}
+                />
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                  <StateLanguageFilterTabs
+                    value={stateLangFilter}
+                    onChange={setStateLangFilter}
+                    allLabel={pageText.all[currentLocale]}
+                  />
+                  <SearchBox value={stateQuery} onChange={setStateQuery} />
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/70">
+                <ScrollArea className="h-[34rem]">
+                  <Table>
+                    <TableHeader className="bg-muted/40">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-16 px-5">No</TableHead>
+                        <TableHead className="min-w-[34rem]">Status nomi</TableHead>
+                        <TableHead className="min-w-[14rem]">LANG</TableHead>
+                        <TableHead className="min-w-[8rem]">Holat</TableHead>
+                        <TableHead className="w-32 px-5 text-right">Amallar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {statesQuery.isLoading ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={5} className="h-[20rem] px-5">
+                            <div className="flex items-center justify-center gap-3 text-muted-foreground">
+                              <Loader2 className="size-4 animate-spin" />
+                              <span>Ma'lumotlar yuklanmoqda...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredStates.length === 0 ? (
+                        <TableRow className="bg-transparent hover:bg-transparent">
+                          <TableCell colSpan={5} className="px-0 py-0">
+                            <EmptyState
+                              title="Statuslar topilmadi"
+                              description="LANG filterini o'zgartirib ko'ring yoki yangi status qo'shing."
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredStates.map((row, index) => (
+                          <TableRow key={row.id} className="bg-transparent">
+                            <TableCell className="px-5 font-semibold text-muted-foreground">{index + 1}</TableCell>
+                            <TableCell className="py-4 whitespace-normal">
+                              <p className="max-w-[42rem] text-sm leading-6 font-medium text-foreground">{row.name}</p>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="h-7 rounded-full px-3">
+                                {stateLanguageShortLabels[row.lang]}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <StatusChip active={row.active} />
+                            </TableCell>
+                            <TableCell className="px-5">
+                              <ActionButtons
+                                label={row.name}
+                                onEdit={() => openStateEditor(row)}
+                                onDelete={() =>
+                                  setDeleteState({
+                                    kind: "state",
+                                    id: row.id,
+                                    label: `${row.code} / ${row.lang}`,
+                                  })
+                                }
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {activeTab !== "tables" ? (
@@ -1494,9 +1960,13 @@ export function ClassifiersPage() {
               ? "Yangi boshqarma qo'shish"
               : activeTab === "stages"
                 ? "Yangi bosqich qo'shish"
-                : activeTab === "systemTypes"
+              : activeTab === "systemTypes"
                   ? "Yangi tizim turi qo'shish"
-                  : "Yangi server qo'shish"
+                  : activeTab === "roles"
+                    ? "Yangi rol qo'shish"
+                    : activeTab === "states"
+                      ? "Yangi status qo'shish"
+                    : "Yangi server qo'shish"
           }
         >
           <Plus className="size-7" />
@@ -1714,10 +2184,18 @@ export function ClassifiersPage() {
                 ? editorState.mode === "create"
                   ? "Yangi bosqich qo'shish"
                   : "Bosqich ma'lumotlarini tahrirlash"
-                : editorState.kind === "systemType"
+              : editorState.kind === "systemType"
                   ? editorState.mode === "create"
                     ? "Yangi tizim turi qo'shish"
                     : "Tizim turi ma'lumotlarini tahrirlash"
+              : editorState.kind === "role"
+                  ? editorState.mode === "create"
+                    ? "Yangi rol qo'shish"
+                    : "Rol ma'lumotlarini tahrirlash"
+                : editorState.kind === "state"
+                  ? editorState.mode === "create"
+                    ? "Yangi status qo'shish"
+                    : "Status ma'lumotlarini tahrirlash"
                   : editorState.mode === "create"
                     ? "Yangi server qo'shish"
                     : "Server ma'lumotlarini tahrirlash"
@@ -1729,6 +2207,10 @@ export function ClassifiersPage() {
                 ? "Bosqich nomi, tavsifi va holatini boshqaring."
                 : editorState.kind === "systemType"
                   ? "Tizim nomi va ichki yoki tashqi turini boshqaring."
+                  : editorState.kind === "role"
+                    ? "Rol nomi va holatini boshqaring."
+                  : editorState.kind === "state"
+                    ? "Status kodi, nomi, LANG va holatini boshqaring."
                   : "Server nomi, ta'rifi va holatini boshqaring."
           }
           onClose={() => setEditorState(null)}
@@ -1876,6 +2358,99 @@ export function ClassifiersPage() {
                   />
                 </div>
               </>
+            ) : editorState.kind === "role" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="role-name">Rol nomi</Label>
+                  <Input
+                    id="role-name"
+                    value={roleForm.name}
+                    onChange={(event) =>
+                      setRoleForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                    placeholder="Rol nomini kiriting"
+                    className="h-11 rounded-[14px]"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-[18px] border border-border/70 bg-background/70 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Faol holatda saqlash</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Nofaol rollar tanlovlarda ko'rinmaydi.</p>
+                  </div>
+                  <Switch
+                    checked={roleForm.active}
+                    onCheckedChange={(checked) =>
+                      setRoleForm((current) => ({ ...current, active: Boolean(checked) }))
+                    }
+                  />
+                </div>
+              </>
+            ) : editorState.kind === "state" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="state-code">Status kodi</Label>
+                  <Input
+                    id="state-code"
+                    value={stateForm.code}
+                    onChange={(event) =>
+                      setStateForm((current) => ({ ...current, code: event.target.value }))
+                    }
+                    placeholder="Masalan: NEW"
+                    className="h-11 rounded-[14px] font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="state-name">Status nomi</Label>
+                  <Input
+                    id="state-name"
+                    value={stateForm.name}
+                    onChange={(event) =>
+                      setStateForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                    placeholder="Status nomini kiriting"
+                    className="h-11 rounded-[14px]"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="state-lang">LANG</Label>
+                  <Select
+                    value={stateForm.lang}
+                    onValueChange={(value) =>
+                      setStateForm((current) => ({ ...current, lang: (value as LocaleCode | undefined) ?? current.lang }))
+                    }
+                  >
+                    <SelectTrigger id="state-lang" className="h-11 w-full rounded-[14px]">
+                      <SelectValue placeholder="LANG tanlang" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stateLanguageOptions.map((langCode) => (
+                        <SelectItem key={langCode} value={langCode}>
+                          {stateLanguageLabels[langCode]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center justify-between rounded-[18px] border border-border/70 bg-background/70 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Faol holatda saqlash</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Faqat faol statuslar keyingi tanlovlarda ishlatiladi.</p>
+                  </div>
+                  <Switch
+                    checked={stateForm.active}
+                    onCheckedChange={(checked) =>
+                      setStateForm((current) => ({ ...current, active: Boolean(checked) }))
+                    }
+                  />
+                </div>
+              </>
             ) : (
               <>
                 <div className="space-y-2">
@@ -1964,3 +2539,4 @@ export function ClassifiersPage() {
     </div>
   );
 }
+

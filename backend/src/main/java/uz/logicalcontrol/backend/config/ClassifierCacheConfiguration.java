@@ -12,6 +12,8 @@ public class ClassifierCacheConfiguration {
     public static final String PROCESS_STAGES_CACHE = "classifierProcessStages";
     public static final String SYSTEM_TYPES_CACHE = "classifierSystemTypes";
     public static final String SERVERS_CACHE = "classifierServers";
+    public static final String ROLES_CACHE = "classifierRoles";
+    public static final String STATES_CACHE = "classifierStates";
     public static final String TABLES_CACHE = "classifierTables";
 
     @Bean
@@ -21,6 +23,8 @@ public class ClassifierCacheConfiguration {
             PROCESS_STAGES_CACHE,
             SYSTEM_TYPES_CACHE,
             SERVERS_CACHE,
+            ROLES_CACHE,
+            STATES_CACHE,
             TABLES_CACHE
         );
         cacheManager.setAllowNullValues(false);

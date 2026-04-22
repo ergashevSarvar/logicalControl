@@ -15,13 +15,13 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "classifier_system_types")
+@Table(name = "system_types")
 public class ClassifierSystemTypeEntity extends BaseEntity {
 
-    @Column(name = "system_name", nullable = false, length = 120)
+    @Column(name = "system_name", nullable = false, length = 120, columnDefinition = "VARCHAR(120) CCSID 1208")
     private String systemName;
 
-    @Column(name = "scope_type", nullable = false, length = 20)
+    @Column(name = "scope_type", nullable = false, length = 20, columnDefinition = "VARCHAR(20) CCSID 1208")
     private String scopeType;
 
     @Column(nullable = false)

@@ -2,23 +2,38 @@ spring:
   application:
     name: logical-control-backend
   datasource:
-    url: jdbc:postgresql://localhost:5432/logical_control
-    username: postgres
-    password: 00229005
+    url: jdbc:as400://dbtest.db.gtk/LOGICALC
+    username: ${LOGICALC_DB_USERNAME:etranzitt}
+    password: ${LOGICALC_DB_PASSWORD:etr@nzit}
+    driver-class-name: com.ibm.as400.access.AS400JDBCDriver
+    hikari:
+      pool-name: logicalc-main
+      auto-commit: true
+      connection-test-query: select current_timestamp cts from sysibm.sysdummy1
+      keepalive-time: 240000
+      connection-timeout: 30000
+      validation-timeout: 5000
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 500000
+      max-lifetime: 600000
   threads:
     virtual:
       enabled: true
   jpa:
+    database-platform: org.hibernate.community.dialect.DB2iLegacyDialect
     open-in-view: false
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     properties:
       hibernate:
+        default_schema: LOGICALC
         format_sql: true
+        use_nationalized_character_data: true
         jdbc:
           time_zone: UTC
   flyway:
-    enabled: true
+    enabled: false
     locations: classpath:db/migration
   jackson:
     time-zone: Asia/Tashkent

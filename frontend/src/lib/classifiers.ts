@@ -1,14 +1,18 @@
 import {
   fetchClassifierDepartments,
   fetchClassifierProcessStages,
+  fetchClassifierRoles,
   fetchClassifierServers,
+  fetchClassifierStates,
   fetchClassifierSystemTypes,
   fetchClassifierTables,
 } from "@/lib/api";
 import type {
   ClassifierDepartment,
   ClassifierProcessStage,
+  ClassifierRole,
   ClassifierServer,
+  ClassifierState,
   ClassifierSystemType,
   ClassifierTable,
   DeploymentScope,
@@ -35,6 +39,9 @@ export const classifierQueryKeys = {
   departments: ["classifiers", "departments"] as const,
   processStages: ["classifiers", "processStages"] as const,
   systemTypes: ["classifiers", "systemTypes"] as const,
+  roles: ["classifiers", "roles"] as const,
+  statesBase: ["classifiers", "states"] as const,
+  states: (lang?: string) => ["classifiers", "states", lang ?? "all"] as const,
   tables: ["classifiers", "tables"] as const,
   servers: ["classifiers", "servers"] as const,
 };
@@ -55,6 +62,28 @@ export function sortClassifierSystemTypes(rows: ClassifierSystemType[]) {
 
 export function sortClassifierServers(rows: ClassifierServer[]) {
   return [...rows].sort((left, right) => left.name.localeCompare(right.name, "uz"));
+}
+
+export function sortClassifierRoles(rows: ClassifierRole[]) {
+  return [...rows].sort((left, right) => left.name.localeCompare(right.name, "uz"));
+}
+
+export function sortClassifierStates(rows: ClassifierState[]) {
+  const stateOrder: Record<string, number> = {
+    NEW: 1,
+    SAVED: 2,
+    APPROVED_BY_DEPARTMENT: 3,
+    APPROVED: 4,
+  };
+
+  return [...rows].sort(
+    (left, right) =>
+      (stateOrder[left.code.toUpperCase()] ?? Number.MAX_SAFE_INTEGER) -
+        (stateOrder[right.code.toUpperCase()] ?? Number.MAX_SAFE_INTEGER) ||
+      left.code.localeCompare(right.code, "uz") ||
+      left.lang.localeCompare(right.lang, "uz") ||
+      left.name.localeCompare(right.name, "uz"),
+  );
 }
 
 export function sortClassifierTables(rows: ClassifierTable[]) {
@@ -78,6 +107,14 @@ export async function getClassifierSystemTypes() {
 
 export async function getClassifierServers() {
   return sortClassifierServers(await fetchClassifierServers());
+}
+
+export async function getClassifierRoles() {
+  return sortClassifierRoles(await fetchClassifierRoles());
+}
+
+export async function getClassifierStates(lang?: string) {
+  return sortClassifierStates(await fetchClassifierStates(lang));
 }
 
 export async function getClassifierTables() {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 
 import { RU, US, UZ } from "country-flag-icons/react/3x2";
@@ -18,48 +18,167 @@ import { useAuth } from "@/providers/auth-provider";
 import { usePalette } from "@/providers/palette-provider";
 
 const languageFlags: Record<LocaleCode, ComponentType<{ title?: string; className?: string }>> = {
-  uzCyrl: UZ,
-  uzLatn: UZ,
-  ru: RU,
-  en: US,
+  UZ: UZ,
+  OZ: UZ,
+  RU: RU,
+  EN: US,
 };
 
 const localeMap: Record<LocaleCode, string> = {
-  uzCyrl: "uz-Cyrl-UZ",
-  uzLatn: "uz-UZ",
-  ru: "ru-RU",
-  en: "en-US",
+  UZ: "uz-Cyrl-UZ",
+  OZ: "uz-UZ",
+  RU: "ru-RU",
+  EN: "en-US",
 };
 
 const weekdayLabels: Record<LocaleCode, string[]> = {
-  uzCyrl: ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"],
-  uzLatn: ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"],
-  ru: ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"],
-  en: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+  UZ: ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"],
+  OZ: ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"],
+  RU: ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"],
+  EN: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
 };
 
-const themeOptions: Array<{ value: ThemeMode; icon: typeof SunMedium; label: string }> = [
-  { value: "light", icon: SunMedium, label: "Light" },
-  { value: "dark", icon: Moon, label: "Dark" },
-  { value: "system", icon: Monitor, label: "System" },
-];
 const RECENT_SEARCHES_KEY = "logical-control.recent-searches";
 const MAX_RECENT_SEARCHES = 7;
-const SEARCH_PLACEHOLDER_POOL = [
-  "Ruxsatnoma muddati nazorati",
-  "Risk toifasi ogohlantirishi",
-  "Transport mosligi tekshiruvi",
-  "Qabul qiluvchi istisnolari",
-  "Avto bekor qilish muddati",
-  "Deklaratsiya qiymati nazorati",
-  "Broker faolligi monitoringi",
-  "Yuk kodi verifikatsiyasi",
-  "Hududiy post cheklovi",
-  "Import limiti tekshiruvi",
-] as const;
+const THEME_LABELS: Record<LocaleCode, Record<ThemeMode, string>> = {
+  OZ: { light: "Yorug'", dark: "Qorong'i", system: "Tizim" },
+  UZ: { light: "Ёруғ", dark: "Қоронғи", system: "Тизим" },
+  RU: { light: "Светлая", dark: "Темная", system: "Система" },
+  EN: { light: "Light", dark: "Dark", system: "System" },
+};
+const SEARCH_PLACEHOLDER_POOL: Record<LocaleCode, readonly string[]> = {
+  OZ: [
+    "Ruxsatnoma muddati nazorati",
+    "Risk toifasi ogohlantirishi",
+    "Transport mosligi tekshiruvi",
+    "Qabul qiluvchi istisnolari",
+    "Avto bekor qilish muddati",
+    "Deklaratsiya qiymati nazorati",
+    "Broker faolligi monitoringi",
+    "Yuk kodi verifikatsiyasi",
+    "Hududiy post cheklovi",
+    "Import limiti tekshiruvi",
+  ],
+  UZ: [
+    "Рухсатнома муддати назорати",
+    "Риск тоифаси огоҳлантириши",
+    "Транспорт мослиги текшируви",
+    "Қабул қилувчи истиснолари",
+    "Авто бекор қилиш муддати",
+    "Декларация қиймати назорати",
+    "Брокер фаоллиги мониторинги",
+    "Юк коди верификацияси",
+    "Ҳудудий пост чеклови",
+    "Импорт лимити текшируви",
+  ],
+  RU: [
+    "Контроль срока разрешения",
+    "Предупреждение по категории риска",
+    "Проверка соответствия транспорта",
+    "Исключения получателя",
+    "Срок автоотмены",
+    "Контроль стоимости декларации",
+    "Мониторинг активности брокера",
+    "Проверка кода груза",
+    "Ограничение по территориальному посту",
+    "Проверка лимита импорта",
+  ],
+  EN: [
+    "Permit expiry control",
+    "Risk category alert",
+    "Transport compliance check",
+    "Receiver exceptions",
+    "Auto-cancel period",
+    "Declaration value control",
+    "Broker activity monitoring",
+    "Cargo code verification",
+    "Territorial post restriction",
+    "Import limit check",
+  ],
+};
+const TOPBAR_TEXT = {
+  collapseSidebar: {
+    OZ: "Yon panelni yig'ish",
+    UZ: "Ён панелни йиғиш",
+    RU: "Свернуть боковую панель",
+    EN: "Collapse sidebar",
+  },
+  expandSidebar: {
+    OZ: "Yon panelni kengaytirish",
+    UZ: "Ён панелни кенгайтириш",
+    RU: "Развернуть боковую панель",
+    EN: "Expand sidebar",
+  },
+  administrator: {
+    OZ: "Administrator",
+    UZ: "Администратор",
+    RU: "Администратор",
+    EN: "Administrator",
+  },
+  searchAction: {
+    OZ: "Qidirish",
+    UZ: "Қидириш",
+    RU: "Поиск",
+    EN: "Search",
+  },
+  recentSearches: {
+    OZ: "Yaqinda qidirilganlar",
+    UZ: "Яқинда қидирилганлар",
+    RU: "Недавние запросы",
+    EN: "Recent searches",
+  },
+  clear: {
+    OZ: "Tozalash",
+    UZ: "Тозалаш",
+    RU: "Очистить",
+    EN: "Clear",
+  },
+  removeSearch: {
+    OZ: "{{item}} ni o'chirish",
+    UZ: "{{item}} ни ўчириш",
+    RU: "Удалить {{item}}",
+    EN: "Remove {{item}}",
+  },
+  notifications: {
+    OZ: "Bildirishnomalar",
+    UZ: "Билдиришномалар",
+    RU: "Уведомления",
+    EN: "Notifications",
+  },
+  profile: {
+    OZ: "Profil",
+    UZ: "Профиль",
+    RU: "Профиль",
+    EN: "Profile",
+  },
+  profileSoon: {
+    OZ: "Profil bo'limi tez orada qo'shiladi.",
+    UZ: "Профиль бўлими тез орада қўшилади.",
+    RU: "Раздел профиля скоро появится.",
+    EN: "Profile section is coming soon.",
+  },
+  logout: {
+    OZ: "Tizimdan chiqish",
+    UZ: "Тизимдан чиқиш",
+    RU: "Выйти из системы",
+    EN: "Sign out",
+  },
+  logoutTitle: {
+    OZ: "Tizimdan chiqishni tasdiqlaysizmi?",
+    UZ: "Тизимдан чиқишни тасдиқлайсизми?",
+    RU: "Подтвердить выход из системы?",
+    EN: "Confirm sign out?",
+  },
+  logoutDescription: {
+    OZ: "Joriy sessiya yakunlanadi va siz login sahifasiga qaytasiz.",
+    UZ: "Жорий сессия якунланади ва сиз логин саҳифасига қайтаcиз.",
+    RU: "Текущая сессия завершится, и вы вернетесь на страницу входа.",
+    EN: "Your current session will end and you will return to the login page.",
+  },
+} as const;
 
 function pickRandomSearchHints(count: number) {
-  return [...SEARCH_PLACEHOLDER_POOL]
+  return [...SEARCH_PLACEHOLDER_POOL.OZ]
     .sort(() => Math.random() - 0.5)
     .slice(0, count);
 }
@@ -88,7 +207,6 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
   const { user, logout } = useAuth();
   const [now, setNow] = useState(() => new Date());
   const [searchValue, setSearchValue] = useState("");
-  const [searchHints] = useState(() => pickRandomSearchHints(5));
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [placeholderLength, setPlaceholderLength] = useState(0);
   const [isDeletingPlaceholder, setIsDeletingPlaceholder] = useState(false);
@@ -105,10 +223,19 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLDivElement | null>(null);
-  const currentLocale = (i18n.language in localeLabels ? i18n.language : "uzLatn") as LocaleCode;
+  const currentLocale = (i18n.language in localeLabels ? i18n.language : "OZ") as LocaleCode;
   const CurrentFlag = languageFlags[currentLocale];
   const currentLocaleLabel = localeLabels[currentLocale];
   const activeTheme = (theme ?? "system") as ThemeMode;
+  const searchHints = useMemo(() => pickRandomSearchHints(5).map((_, index) => SEARCH_PLACEHOLDER_POOL[currentLocale][index % SEARCH_PLACEHOLDER_POOL[currentLocale].length]), [currentLocale]);
+  const themeOptions: Array<{ value: ThemeMode; icon: typeof SunMedium; label: string }> = useMemo(
+    () => [
+      { value: "light", icon: SunMedium, label: THEME_LABELS[currentLocale].light },
+      { value: "dark", icon: Moon, label: THEME_LABELS[currentLocale].dark },
+      { value: "system", icon: Monitor, label: THEME_LABELS[currentLocale].system },
+    ],
+    [currentLocale],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -209,12 +336,12 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
             className={cn("size-11 rounded-[16px]", chromeBlockClass, "hover:bg-white/70 dark:hover:bg-white/12")}
           >
             <Menu className="size-4.5" />
-            <span className="sr-only">{expanded ? "Collapse sidebar" : "Expand sidebar"}</span>
+            <span className="sr-only">{expanded ? TOPBAR_TEXT.collapseSidebar[currentLocale] : TOPBAR_TEXT.expandSidebar[currentLocale]}</span>
           </Button>
 
           <div className="min-w-0">
             <p className="truncate text-[0.8rem] font-medium text-muted-foreground">{t("appName")}</p>
-            <h2 className="truncate text-[1.65rem] leading-none font-semibold text-foreground">Administrator</h2>
+            <h2 className="truncate text-[1.65rem] leading-none font-semibold text-foreground">{TOPBAR_TEXT.administrator[currentLocale]}</h2>
           </div>
         </div>
 
@@ -248,7 +375,7 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
               variant="ghost"
               size="icon"
               className="absolute top-1/2 right-2 size-9 -translate-y-1/2 rounded-[14px] bg-white/66 text-muted-foreground shadow-sm hover:bg-white dark:bg-white/8 dark:hover:bg-white/12"
-              aria-label="Qidirish"
+              aria-label={TOPBAR_TEXT.searchAction[currentLocale]}
             >
               <Search className="size-4" />
             </Button>
@@ -257,13 +384,13 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
           {isSearchOpen && recentSearches.length > 0 ? (
             <div className="absolute top-[calc(100%+0.75rem)] left-0 z-40 w-full overflow-hidden rounded-[22px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(247,250,255,0.95))] shadow-[0_26px_56px_-32px_rgba(15,23,42,0.34)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(26,33,46,0.96),rgba(20,26,37,0.94))]">
               <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">Yaqinda qidirilganlar</p>
+                <p className="text-sm font-semibold text-foreground">{TOPBAR_TEXT.recentSearches[currentLocale]}</p>
                 <button
                   type="button"
                   onClick={() => persistRecentSearches([])}
                   className="text-sm font-medium text-primary transition hover:text-primary/80"
                 >
-                  Tozalash
+                  {TOPBAR_TEXT.clear[currentLocale]}
                 </button>
               </div>
 
@@ -291,7 +418,7 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
                       type="button"
                       onClick={() => removeRecentSearch(item)}
                       className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/8"
-                      aria-label={`${item} ni o'chirish`}
+                      aria-label={TOPBAR_TEXT.removeSearch[currentLocale].replace("{{item}}", item)}
                     >
                       <X className="size-4" />
                     </button>
@@ -387,7 +514,7 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
               variant="ghost"
               size="icon"
               className="relative size-9 rounded-[12px] bg-transparent hover:bg-white/55 dark:hover:bg-white/10"
-              aria-label="Notifications"
+              aria-label={TOPBAR_TEXT.notifications[currentLocale]}
             >
               <Bell className="size-4.5" />
               <span className="absolute top-2 right-2 size-2 rounded-full bg-primary" />
@@ -415,12 +542,12 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
                   type="button"
                   onClick={() => {
                     setIsUserMenuOpen(false);
-                    toast.info("Profil bo'limi tez orada qo'shiladi.");
+                    toast.info(TOPBAR_TEXT.profileSoon[currentLocale]);
                   }}
                   className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-foreground transition hover:bg-black/[0.03] dark:hover:bg-white/6"
                 >
                   <User className="size-4 text-muted-foreground" />
-                  <span>Profil</span>
+                  <span>{TOPBAR_TEXT.profile[currentLocale]}</span>
                 </button>
                 <div className="h-px bg-border/80" />
                 <button
@@ -432,7 +559,7 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
                   className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-red-500 transition hover:bg-red-500/6 dark:text-red-300 dark:hover:bg-red-500/10"
                 >
                   <LogOut className="size-4" />
-                  <span>Tizimdan chiqish</span>
+                  <span>{TOPBAR_TEXT.logout[currentLocale]}</span>
                 </button>
               </div>
             ) : null}
@@ -455,9 +582,9 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
             </div>
 
             <div className="mt-4 space-y-2">
-              <h3 className="text-xl font-semibold text-foreground">Tizimdan chiqishni tasdiqlaysizmi?</h3>
+              <h3 className="text-xl font-semibold text-foreground">{TOPBAR_TEXT.logoutTitle[currentLocale]}</h3>
               <p className="text-sm leading-6 text-muted-foreground">
-                Joriy sessiya yakunlanadi va siz login sahifasiga qaytasiz.
+                {TOPBAR_TEXT.logoutDescription[currentLocale]}
               </p>
             </div>
 
@@ -483,3 +610,5 @@ export function Topbar({ expanded, onToggle }: TopbarProps) {
     </header>
   );
 }
+
+

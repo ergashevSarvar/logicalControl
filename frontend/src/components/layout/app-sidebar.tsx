@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { AppLogo } from "@/components/common/app-logo";
 import { Button } from "@/components/ui/button";
+import type { LocaleCode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -29,7 +30,7 @@ const fallbackLabels: Record<(typeof items)[number]["key"], string> = {
   dashboard: "Bosh sahifa",
   classifiers: "Tasniflagichlar",
   controls: "Mantiqiy nazoratlar",
-  create: "MN yaratish",
+  create: "Yangi yaratish",
   builder: "Visual Rule Builder",
   logs: "Logs va statistika",
 };
@@ -40,10 +41,39 @@ type AppSidebarProps = {
 };
 
 export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { logout } = useAuth();
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const { pathname } = useLocation();
+  const currentLocale = (i18n.language === "UZ" || i18n.language === "OZ" || i18n.language === "RU" || i18n.language === "EN"
+    ? i18n.language
+    : "OZ") as LocaleCode;
+  const appNameLines: Record<LocaleCode, [string, string]> = {
+    OZ: ["Mantiqiy", "Nazorat"],
+    UZ: ["Мантиқий", "Назорат"],
+    RU: ["Логический", "Контроль"],
+    EN: ["Logical", "Control"],
+  };
+  const sidebarText = {
+    expand: {
+      OZ: "Yon panelni kengaytirish",
+      UZ: "Ён панелни кенгайтириш",
+      RU: "Развернуть боковую панель",
+      EN: "Expand sidebar",
+    },
+    logoutTitle: {
+      OZ: "Tizimdan chiqishni tasdiqlaysizmi?",
+      UZ: "Тизимдан чиқишни тасдиқлайсизми?",
+      RU: "Подтвердить выход из системы?",
+      EN: "Confirm sign out?",
+    },
+    logoutDescription: {
+      OZ: "Joriy sessiya yakunlanadi va siz login sahifasiga qaytasiz.",
+      UZ: "Жорий сессия якунланади ва сиз логин саҳифасига қайтаcиз.",
+      RU: "Текущая сессия завершится, и вы вернетесь на страницу входа.",
+      EN: "Your current session will end and you will return to the login page.",
+    },
+  } as const;
 
   const isItemActive = (to: (typeof items)[number]["to"]) => {
     switch (to) {
@@ -84,10 +114,10 @@ export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
                 />
                 <div className="min-w-0">
                   <p className="text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-primary/75">
-                    Mantiqiy
+                    {appNameLines[currentLocale][0]}
                   </p>
                   <p className="mt-0.5 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-primary/75">
-                    Nazorat
+                    {appNameLines[currentLocale][1]}
                   </p>
                 </div>
               </div>
@@ -104,7 +134,7 @@ export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
                 imageClassName="size-11"
                 frameClassName="rounded-[18px] bg-transparent"
               />
-              <span className="sr-only">Expand sidebar</span>
+              <span className="sr-only">{sidebarText.expand[currentLocale]}</span>
             </Button>
           )}
         </div>
@@ -196,9 +226,9 @@ export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
             </div>
 
             <div className="mt-4 space-y-2">
-              <h3 className="text-xl font-semibold text-foreground">Tizimdan chiqishni tasdiqlaysizmi?</h3>
+              <h3 className="text-xl font-semibold text-foreground">{sidebarText.logoutTitle[currentLocale]}</h3>
               <p className="text-sm leading-6 text-muted-foreground">
-                Joriy sessiya yakunlanadi va siz login sahifasiga qaytasiz.
+                {sidebarText.logoutDescription[currentLocale]}
               </p>
             </div>
 
@@ -223,3 +253,4 @@ export function AppSidebar({ expanded, onToggle }: AppSidebarProps) {
     </>
   );
 }
+

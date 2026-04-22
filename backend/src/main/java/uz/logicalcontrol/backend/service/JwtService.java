@@ -32,6 +32,7 @@ public class JwtService {
             .subject(user.getUsername())
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiresAt))
+            .claim("userId", user.getId().toString())
             .claim("fullName", user.getFullName())
             .claim("locale", user.getLocale())
             .claim("roles", roles)

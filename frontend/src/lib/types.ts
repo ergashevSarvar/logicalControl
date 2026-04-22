@@ -1,4 +1,4 @@
-export type LocaleCode = "uzCyrl" | "uzLatn" | "ru" | "en";
+export type LocaleCode = "UZ" | "OZ" | "RU" | "EN";
 export type ThemeMode = "light" | "dark" | "system";
 export type PaletteName = "ocean" | "copper" | "emerald" | "graphite";
 
@@ -7,8 +7,12 @@ export type ControlType = "WARNING" | "ALLOW" | "BLOCK";
 export type ControlStatus = "ACTIVE" | "CANCELLED" | "SUSPENDED";
 export type DeploymentScope = "INTERNAL" | "EXTERNAL" | "HYBRID";
 export type ControlDirection = "ENTRY" | "EXIT";
+export type ConfidentialityLevel = "CONFIDENTIAL" | "NON_CONFIDENTIAL";
 export type RuleType = "CONDITION" | "GROUP" | "ACTION" | "RESULT";
 export type LogResult = "POSITIVE" | "NEGATIVE";
+
+export const CONFIDENTIALITY_LEVEL_CONFIDENTIAL: ConfidentialityLevel = "CONFIDENTIAL";
+export const CONFIDENTIALITY_LEVEL_NON_CONFIDENTIAL: ConfidentialityLevel = "NON_CONFIDENTIAL";
 
 export interface UserProfile {
   id: string;
@@ -125,6 +129,36 @@ export interface ClassifierServerRequest {
   active: boolean;
 }
 
+export interface ClassifierRole {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassifierRoleRequest {
+  name: string;
+  active: boolean;
+}
+
+export interface ClassifierState {
+  id: string;
+  code: string;
+  name: string;
+  lang: LocaleCode;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassifierStateRequest {
+  code: string;
+  name: string;
+  lang: LocaleCode;
+  active: boolean;
+}
+
 export interface ClassifierTableColumn {
   id: string | null;
   name: string;
@@ -174,13 +208,15 @@ export interface ControlListItem {
   code: string;
   uniqueNumber: string;
   name: string;
+  currentStateCode: string | null;
+  currentStateName: string | null;
   systemName: ControlSystem;
   deploymentScope: DeploymentScope;
   directionType: ControlDirection | null;
   controlType: ControlType;
   status: ControlStatus;
   processStage: string;
-  confidentialityLevel: string;
+  confidentialityLevel: ConfidentialityLevel;
   priorityOrder: number | null;
   versionNumber: number;
   startDate: string | null;
@@ -209,6 +245,15 @@ export interface ChangeLogItem {
   details: Record<string, unknown>;
 }
 
+export interface FieldChangeItem {
+  id: string;
+  actor: string;
+  changedAt: string;
+  fieldPath: string;
+  oldValue: string | null;
+  newValue: string | null;
+}
+
 export interface ControlRequest {
   code: string;
   name: string;
@@ -222,6 +267,7 @@ export interface ControlRequest {
   basisFileRemoved: boolean;
   systemName: string;
   approvers: string[];
+  approverDepartmentIds: string[];
   startDate: string | null;
   finishDate: string | null;
   uniqueNumber: string;
@@ -234,7 +280,7 @@ export interface ControlRequest {
   messages: Record<LocaleCode, string>;
   phoneExtension: string;
   priorityOrder: number;
-  confidentialityLevel: string;
+  confidentialityLevel: ConfidentialityLevel;
   smsNotificationEnabled: boolean;
   smsPhones: string[];
   deploymentScope: DeploymentScope;
@@ -262,6 +308,7 @@ export interface ControlOverviewRequest {
   basisFileBase64: string | null;
   basisFileRemoved: boolean;
   systemName: string;
+  approverDepartmentIds: string[];
   startDate: string | null;
   finishDate: string | null;
   controlType: ControlType;
@@ -270,7 +317,7 @@ export interface ControlOverviewRequest {
   smsPhones: string[];
   deploymentScope: DeploymentScope;
   directionType: ControlDirection | null;
-  confidentialityLevel: string;
+  confidentialityLevel: ConfidentialityLevel;
 }
 
 export interface ControlUniqueNumberResponse {
@@ -314,8 +361,11 @@ export interface SqlQueryExecutionStatusResponse {
 export interface ControlDetail extends ControlRequest {
   id: string;
   hasBasisFile: boolean;
+  currentStateCode: string | null;
+  currentStateName: string | null;
   recentLogs: ControlLogItem[];
   changeLogs: ChangeLogItem[];
+  fieldChangeLogs: FieldChangeItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -340,10 +390,10 @@ export interface LogsResponse {
 }
 
 export const localeLabels: Record<LocaleCode, string> = {
-  uzCyrl: "Ўзбек",
-  uzLatn: "O'zbek",
-  ru: "Русский",
-  en: "English",
+  UZ: "Ўзбек",
+  OZ: "O'zbek",
+  RU: "Русский",
+  EN: "English",
 };
 
 export const paletteOptions: Array<{ value: PaletteName; label: string; hint: string }> = [
@@ -365,6 +415,44 @@ export function createDefaultRule(order = 0): ControlRule {
   };
 }
 
+export function normalizeConfidentialityLevelKey(value: string | null | undefined): ConfidentialityLevel {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return CONFIDENTIALITY_LEVEL_NON_CONFIDENTIAL;
+  }
+
+  const normalizedKey = normalized.toUpperCase().replace(/[\s-]+/g, "_");
+  return normalizedKey === "MAXFIY" || normalizedKey === CONFIDENTIALITY_LEVEL_CONFIDENTIAL
+    ? CONFIDENTIALITY_LEVEL_CONFIDENTIAL
+    : CONFIDENTIALITY_LEVEL_NON_CONFIDENTIAL;
+}
+
+export function normalizeLocaleCode(value: string | null | undefined): LocaleCode {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return "OZ";
+  }
+
+  switch (normalized.toLowerCase()) {
+    case "uz":
+    case "uzcyrl":
+    case "uz-cyrl":
+      return "UZ";
+    case "oz":
+    case "uzlatn":
+    case "uz-latn":
+      return "OZ";
+    case "ru":
+      return "RU";
+    case "en":
+      return "EN";
+    default:
+      return normalized === "UZ" || normalized === "OZ" || normalized === "RU" || normalized === "EN"
+        ? normalized
+        : "OZ";
+  }
+}
+
 export function createDefaultControlRequest(): ControlRequest {
   return {
     code: "",
@@ -379,24 +467,25 @@ export function createDefaultControlRequest(): ControlRequest {
     basisFileRemoved: false,
     systemName: "Yukli avtotransport (AT)",
     approvers: [],
+    approverDepartmentIds: [],
     startDate: null,
     finishDate: null,
     uniqueNumber: "",
     controlType: "BLOCK",
     processStage: "Verifikatsiyadan o'tkazish",
-    authorName: "Admin User",
+    authorName: "",
     responsibleDepartment: "Bojxona nazorati va rasmiylashtiruvini tashkil etish boshqarmasi",
     status: "ACTIVE",
     suspendedUntil: null,
     messages: {
-      uzCyrl: "",
-      uzLatn: "",
-      ru: "",
-      en: "",
+      UZ: "",
+      OZ: "",
+      RU: "",
+      EN: "",
     },
     phoneExtension: "",
     priorityOrder: 1,
-    confidentialityLevel: "Maxfiy emas",
+    confidentialityLevel: CONFIDENTIALITY_LEVEL_NON_CONFIDENTIAL,
     smsNotificationEnabled: false,
     smsPhones: [],
     deploymentScope: "INTERNAL",
@@ -410,6 +499,7 @@ export function createDefaultControlRequest(): ControlRequest {
     conflictMonitoringEnabled: true,
     copiedFromControlId: null,
     ruleBuilderCanvas: {
+      conditionViewMode: "complex",
       title: "New rule canvas",
       nodes: [],
       edges: [],
@@ -431,7 +521,8 @@ export function controlDetailToRequest(detail: ControlDetail): ControlRequest {
     basisFileBase64: null,
     basisFileRemoved: false,
     systemName: detail.systemName,
-    approvers: detail.approvers,
+    approvers: Array.isArray(detail.approvers) ? detail.approvers : [],
+    approverDepartmentIds: Array.isArray(detail.approverDepartmentIds) ? detail.approverDepartmentIds : [],
     startDate: detail.startDate,
     finishDate: detail.finishDate,
     uniqueNumber: detail.uniqueNumber,
@@ -442,9 +533,9 @@ export function controlDetailToRequest(detail: ControlDetail): ControlRequest {
     status: detail.status,
     suspendedUntil: detail.suspendedUntil,
     messages: detail.messages,
-    phoneExtension: detail.phoneExtension,
+    phoneExtension: detail.phoneExtension ?? "",
     priorityOrder: detail.priorityOrder ?? 1,
-    confidentialityLevel: detail.confidentialityLevel,
+    confidentialityLevel: normalizeConfidentialityLevelKey(detail.confidentialityLevel),
     smsNotificationEnabled: detail.smsNotificationEnabled,
     smsPhones: detail.smsPhones,
     deploymentScope: detail.deploymentScope,
@@ -461,3 +552,4 @@ export function controlDetailToRequest(detail: ControlDetail): ControlRequest {
     rules: detail.rules,
   };
 }
+

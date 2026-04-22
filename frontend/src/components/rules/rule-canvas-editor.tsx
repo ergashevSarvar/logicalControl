@@ -21,6 +21,8 @@ import {
 } from "@xyflow/react";
 import {
   createContext,
+  forwardRef,
+  useImperativeHandle,
   useCallback,
   useContext,
   useEffect,
@@ -38,20 +40,26 @@ import {
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Check,
   Ban,
   BellRing,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   GitBranchPlus,
   LoaderCircle,
   Maximize2,
   Minimize2,
   Play,
   Plus,
+  Search,
   ShieldCheck,
   Square,
   Terminal,
@@ -75,6 +83,10 @@ import type {
   RuleType,
   SqlQueryExecutionStatusResponse,
 } from "@/lib/types";
+
+function resolveLocaleCode(language: string): LocaleCode {
+  return language === "UZ" || language === "OZ" || language === "RU" || language === "EN" ? language : "OZ";
+}
 
 type RuleCanvasEditorProps = {
   canvas: Record<string, unknown>;
@@ -146,7 +158,7 @@ type OperatorOption = {
   allowColumnComparison?: boolean;
 };
 
-type BuilderAutocompleteOption = {
+export type BuilderAutocompleteOption = {
   value: string;
   label: string;
   hint?: string;
@@ -291,10 +303,10 @@ const builderTemplates: BuilderTemplate[] = [
 ];
 
 const notifyLocaleFields: Array<{ key: LocaleCode; label: string }> = [
-  { key: "uzCyrl", label: "O'zbekcha (kiril)" },
-  { key: "uzLatn", label: "O'zbekcha (lotin)" },
-  { key: "ru", label: "Русский" },
-  { key: "en", label: "English" },
+  { key: "UZ", label: "O'zbekcha (kiril)" },
+  { key: "OZ", label: "O'zbekcha (lotin)" },
+  { key: "RU", label: "Русский" },
+  { key: "EN", label: "English" },
 ];
 
 const sqlKeywords = new Set([
@@ -732,10 +744,10 @@ function normalizeConditions(source: Record<string, unknown>) {
 
 function createEmptyNotifyMessages(): Record<LocaleCode, string> {
   return {
-    uzCyrl: "",
-    uzLatn: "",
-    ru: "",
-    en: "",
+    UZ: "",
+    OZ: "",
+    RU: "",
+    EN: "",
   };
 }
 
@@ -743,10 +755,10 @@ function normalizeNotifyMessages(source: unknown) {
   const raw = typeof source === "object" && source !== null ? (source as Record<string, unknown>) : {};
 
   return {
-    uzCyrl: String(raw.uzCyrl ?? ""),
-    uzLatn: String(raw.uzLatn ?? ""),
-    ru: String(raw.ru ?? ""),
-    en: String(raw.en ?? ""),
+    UZ: String(raw.UZ ?? raw.uzCyrl ?? ""),
+    OZ: String(raw.OZ ?? raw.uzLatn ?? ""),
+    RU: String(raw.RU ?? raw.ru ?? ""),
+    EN: String(raw.EN ?? raw.en ?? ""),
   } satisfies Record<LocaleCode, string>;
 }
 
@@ -1411,7 +1423,7 @@ function BuilderSelect({
   );
 }
 
-function BuilderAutocompleteSelect({
+export function BuilderAutocompleteSelect({
   value,
   onChange,
   options,
@@ -1419,6 +1431,7 @@ function BuilderAutocompleteSelect({
   searchPlaceholder,
   emptyLabel,
   disabled = false,
+  hasError = false,
   className,
 }: {
   value: string;
@@ -1428,6 +1441,7 @@ function BuilderAutocompleteSelect({
   searchPlaceholder: string;
   emptyLabel: string;
   disabled?: boolean;
+  hasError?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -1519,6 +1533,7 @@ function BuilderAutocompleteSelect({
         }}
         className={cn(
           "nodrag nowheel nopan flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-[12px] border border-input bg-background px-3 text-left text-sm outline-none transition-colors hover:border-primary/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+          hasError && "border-destructive hover:border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20",
           disabled && "cursor-not-allowed bg-muted/40 text-muted-foreground hover:border-input",
         )}
       >
@@ -1806,7 +1821,7 @@ function matchSqlClause(tokens: string[], index: number) {
     : null;
 }
 
-function formatSqlScript(source: string) {
+export function formatSqlScript(source: string) {
   const tokens = Array.from(source.matchAll(sqlTokenRegex), (match) => match[0]).filter((token) => token.trim().length > 0);
 
   if (tokens.length === 0) {
@@ -1935,7 +1950,7 @@ function formatSqlScript(source: string) {
 
   flushCurrentLine();
 
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim().toLowerCase();
 }
 
 export type SqlProjectionColumn = {
@@ -1944,6 +1959,8 @@ export type SqlProjectionColumn = {
 };
 
 const SQL_EDITOR_DRAG_INSERT_MIME = "application/x-logical-control-sql-insert";
+const SQL_EDITOR_ALLOWED_CHARACTER_REGEX = /^[\x09\x0A\x0D\x20-\x7E]$/;
+const SQL_EDITOR_DISALLOWED_CHARACTERS_REGEX = /[^\x09\x0A\x0D\x20-\x7E]/g;
 
 type SqlEditorDragInsertPayload = {
   text: string;
@@ -1975,6 +1992,10 @@ function parseSqlEditorDragInsertPayload(rawValue: string) {
       sourceEditorId: null,
     } satisfies SqlEditorDragInsertPayload;
   }
+}
+
+function sanitizeSqlEditorValue(value: string) {
+  return value.replace(SQL_EDITOR_DISALLOWED_CHARACTERS_REGEX, "");
 }
 
 function isBlockedSelectedColumnSelfDrop(
@@ -2300,6 +2321,7 @@ type SqlAutocompleteSuggestion = {
   id: string;
   kind: "table" | "column" | "schema" | "message";
   label: string;
+  hint?: string;
   insertText: string;
   disabled?: boolean;
 };
@@ -2393,23 +2415,17 @@ function extractSqlAutocompleteTableReferences(source: string) {
     }
 
     let cursor = index + 1;
-    const nameTokens: string[] = [];
-
-    while (cursor < tokens.length) {
-      const currentToken = tokens[cursor];
-      if (!isSqlIdentifierToken(currentToken)) {
-        if (currentToken === "." && nameTokens.length > 0 && isSqlIdentifierToken(tokens[cursor + 1] ?? "")) {
-          nameTokens.push(currentToken, tokens[cursor + 1]!);
-          cursor += 2;
-          continue;
-        }
-
-        break;
-      }
-
-      nameTokens.push(currentToken);
-      cursor += 1;
+    const firstNameToken = tokens[cursor];
+    if (!isSqlIdentifierToken(firstNameToken ?? "")) {
       continue;
+    }
+
+    const nameTokens: string[] = [firstNameToken!];
+    cursor += 1;
+
+    while (tokens[cursor] === "." && isSqlIdentifierToken(tokens[cursor + 1] ?? "")) {
+      nameTokens.push(tokens[cursor]!, tokens[cursor + 1]!);
+      cursor += 2;
     }
 
     if (nameTokens.length === 0) {
@@ -2457,6 +2473,11 @@ function buildSqlAutocompleteMessage(message: string, replaceStart: number, repl
       },
     ],
   };
+}
+
+function formatSqlAutocompleteColumnType(dataType: string | null | undefined) {
+  const normalizedType = dataType?.trim();
+  return normalizedType ? `[${normalizedType.toUpperCase()}]` : undefined;
 }
 
 function buildSqlAutocompleteSuggestions({
@@ -2586,12 +2607,6 @@ function buildSqlAutocompleteSuggestions({
       return null;
     }
 
-    const duplicateColumnCounts = new Map<string, number>();
-    matchingCandidates.forEach(({ column }) => {
-      const normalizedColumnName = column.name.trim().toLocaleLowerCase();
-      duplicateColumnCounts.set(normalizedColumnName, (duplicateColumnCounts.get(normalizedColumnName) ?? 0) + 1);
-    });
-
     const columnSuggestions = matchingCandidates
       .sort((left, right) => {
         const leftName = left.column.name.toLocaleLowerCase();
@@ -2616,13 +2631,12 @@ function buildSqlAutocompleteSuggestions({
           : resolvedReferences.length > 1
             ? `${normalizedTableName}.`
             : "";
-        const duplicateCount = duplicateColumnCounts.get(column.name.trim().toLocaleLowerCase()) ?? 0;
-        const labelPrefix = hasCustomAlias ? normalizedAlias : normalizedTableName;
 
         return {
           id: `column-search-${normalizedTableName}-${normalizedAlias || normalizedTableName}-${column.name}`,
           kind: "column",
-          label: duplicateCount > 1 ? `${labelPrefix}.${column.name}` : column.name,
+          label: column.name,
+          hint: formatSqlAutocompleteColumnType(column.dataType),
           insertText: `${insertPrefix}${column.name}`,
         } satisfies SqlAutocompleteSuggestion;
       });
@@ -2668,7 +2682,8 @@ function buildSqlAutocompleteSuggestions({
         .map((column) => ({
           id: `column-${matchedTable.tableName}-${column.name}`,
           kind: "column",
-          label: `${qualifier}.${column.name}`,
+          label: column.name,
+          hint: formatSqlAutocompleteColumnType(column.dataType),
           insertText: `${qualifier}.${column.name}`,
         } satisfies SqlAutocompleteSuggestion));
 
@@ -2842,6 +2857,197 @@ function SqlProjectionColumnsPanel({
   );
 }
 
+export function SqlExecutionServerAutocomplete({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled = false,
+  compact = false,
+  hasError = false,
+}: {
+  value: string;
+  onChange?: (value: string) => void;
+  options: string[];
+  placeholder: string;
+  disabled?: boolean;
+  compact?: boolean;
+  hasError?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [dropdownFrame, setDropdownFrame] = useState<{
+    top: number | null;
+    bottom: number | null;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent | MouseEvent | TouchEvent) {
+      if (!(event.target instanceof globalThis.Node)) {
+        return;
+      }
+
+      if (containerRef.current?.contains(event.target) || dropdownRef.current?.contains(event.target)) {
+        return;
+      }
+
+      if (open) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+  }, [open]);
+
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    if (open) {
+      const updateDropdownFrame = () => {
+        const rect = triggerRef.current?.getBoundingClientRect();
+        if (!rect) {
+          return;
+        }
+
+        const gap = 6;
+        const viewportPadding = 8;
+        const spaceBelow = window.innerHeight - rect.bottom - gap - viewportPadding;
+        const spaceAbove = rect.top - gap - viewportPadding;
+        const shouldOpenUpward = spaceBelow < 220 && spaceAbove > spaceBelow;
+        const availableSpace = shouldOpenUpward ? spaceAbove : spaceBelow;
+        const width = Math.max(220, rect.width);
+        const maxLeft = Math.max(viewportPadding, window.innerWidth - width - viewportPadding);
+        const left = Math.min(Math.max(viewportPadding, rect.left), maxLeft);
+        const listMaxHeight = Math.max(88, availableSpace - 52);
+
+        setDropdownFrame({
+          top: shouldOpenUpward ? null : rect.bottom + gap,
+          bottom: shouldOpenUpward ? Math.max(viewportPadding, window.innerHeight - rect.top + gap) : null,
+          left,
+          width,
+          maxHeight: Math.min(320, listMaxHeight),
+        });
+      };
+
+      updateDropdownFrame();
+      window.addEventListener("resize", updateDropdownFrame);
+      window.addEventListener("scroll", updateDropdownFrame, true);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+      return () => {
+        window.removeEventListener("resize", updateDropdownFrame);
+        window.removeEventListener("scroll", updateDropdownFrame, true);
+      };
+    }
+
+    setQuery("");
+    setDropdownFrame(null);
+  }, [open]);
+
+  const filteredOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) {
+      return options;
+    }
+
+    return options.filter((option) => option.toLocaleLowerCase().includes(normalizedQuery));
+  }, [options, query]);
+
+  const triggerLabel = value || placeholder;
+  const triggerClassName = compact
+    ? "h-8 rounded-[10px] px-2.5 text-xs"
+    : "h-10 rounded-[12px] px-3 text-sm";
+  const dropdownSearchClassName = compact ? "h-8 rounded-[10px] px-2.5 text-xs" : "h-9 rounded-[10px] px-3 text-sm";
+  const optionClassName = compact ? "px-2.5 py-2 text-xs" : "px-3 py-2.5 text-sm";
+
+  return (
+    <div ref={containerRef} className="nodrag nopan nowheel relative min-w-[220px]">
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) {
+            setOpen((current) => !current);
+          }
+        }}
+        className={cn(
+          "flex w-full items-center gap-2 border border-border bg-background text-left transition hover:bg-muted/55",
+          triggerClassName,
+          hasError && "border-destructive hover:border-destructive focus-visible:border-destructive focus-visible:ring-2 focus-visible:ring-destructive/20",
+          disabled && "cursor-not-allowed text-muted-foreground opacity-70",
+        )}
+      >
+        <span className={cn("min-w-0 flex-1 truncate font-medium", compact ? "text-xs" : "text-sm", value ? "text-foreground" : "text-muted-foreground")}>
+          {triggerLabel}
+        </span>
+        <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && dropdownFrame && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={dropdownRef}
+              className="fixed z-[120] overflow-hidden rounded-[14px] border border-border/75 bg-popover shadow-[0_24px_42px_-28px_rgba(15,23,42,0.34)]"
+              style={{
+                top: dropdownFrame.top ?? undefined,
+                bottom: dropdownFrame.bottom ?? undefined,
+                left: dropdownFrame.left,
+                width: dropdownFrame.width,
+              }}
+            >
+              <div className="border-b border-border/70 p-2">
+                <Input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Serverni qidiring..."
+                  className={dropdownSearchClassName}
+                />
+              </div>
+
+              <div className="overflow-y-auto p-1.5" style={{ maxHeight: dropdownFrame.maxHeight }}>
+                {filteredOptions.length > 0 ? (
+                  filteredOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        onChange?.(option);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-[10px] text-left transition-colors hover:bg-accent hover:text-accent-foreground",
+                        optionClassName,
+                      )}
+                    >
+                      <span className="min-w-0 truncate font-medium">{option}</span>
+                      {value === option ? <Check className="size-3.5 shrink-0 text-primary" /> : null}
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-2.5 py-5 text-center text-xs text-muted-foreground">Mos server topilmadi</div>
+                )}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
 function estimateSelectedColumnsPanelWidth(columns: SqlProjectionColumn[]) {
   const longestColumnNameLength = columns.reduce((longest, column) => Math.max(longest, column.displayName.length), 0);
 
@@ -2883,7 +3089,7 @@ function buildPaginationItems(currentPage: number, totalPages: number) {
 const SQL_RESULT_COLUMN_MIN_WIDTH = 148;
 const SQL_RESULT_COLUMN_MAX_WIDTH = 640;
 const SQL_RESULT_ROW_NUMBER_WIDTH = 64;
-const SQL_RESULT_PAGE_SIZE_OPTIONS = [10, 50, 100] as const;
+const SQL_RESULT_PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000] as const;
 
 function estimateSqlResultColumnWidth(columnName: string, rows: Array<Array<unknown>>, columnIndex: number) {
   const headerLength = columnName.trim().length;
@@ -2943,34 +3149,242 @@ export type SqlCodeEditorInsertionRequest = {
   text: string;
 };
 
+type SqlResultSortDirection = "asc" | "desc";
+
 function SqlExecutionResultsPanel({
   execution,
   pageSize,
   currentPage,
   onPageChange,
   onPageSizeChange,
+  collapsible = false,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   execution: SqlQueryExecutionStatusResponse | null;
   pageSize: number;
   currentPage: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
+  const { i18n } = useTranslation();
+  const currentLocale = resolveLocaleCode(i18n.language);
   const result = execution?.result;
   const rows = result?.rows ?? [];
-  const totalRows = rows.length;
+  const [resultSearchQuery, setResultSearchQuery] = useState("");
+  const [sortConfig, setSortConfig] = useState<{ columnIndex: number; direction: SqlResultSortDirection } | null>(null);
+  const normalizedSearchQuery = resultSearchQuery.trim().toLowerCase();
+  const filteredRows = useMemo(() => {
+    if (!result || normalizedSearchQuery.length === 0) {
+      return rows;
+    }
+
+    return rows.filter((row) =>
+      row.some((cell, index) => {
+        const normalizedCell = String(cell ?? "null").toLowerCase();
+        const normalizedColumn = result.columns[index]?.toLowerCase() ?? "";
+        return normalizedCell.includes(normalizedSearchQuery) || normalizedColumn.includes(normalizedSearchQuery);
+      }),
+    );
+  }, [normalizedSearchQuery, result, rows]);
+  const sortedRows = useMemo(() => {
+    if (!sortConfig) {
+      return filteredRows;
+    }
+
+    const { columnIndex, direction } = sortConfig;
+    const numericValuePattern = /^-?\d+(?:\.\d+)?$/;
+    const directionFactor = direction === "asc" ? 1 : -1;
+
+    return filteredRows
+      .map((row, index) => ({ row, index }))
+      .sort((left, right) => {
+        const leftRaw = left.row[columnIndex];
+        const rightRaw = right.row[columnIndex];
+
+        if (leftRaw === rightRaw) {
+          return left.index - right.index;
+        }
+
+        if (leftRaw === null) {
+          return 1;
+        }
+
+        if (rightRaw === null) {
+          return -1;
+        }
+
+        const leftValue = leftRaw.trim();
+        const rightValue = rightRaw.trim();
+        const leftNumber = numericValuePattern.test(leftValue) ? Number(leftValue) : null;
+        const rightNumber = numericValuePattern.test(rightValue) ? Number(rightValue) : null;
+
+        if (leftNumber !== null && rightNumber !== null) {
+          if (leftNumber === rightNumber) {
+            return left.index - right.index;
+          }
+
+          return (leftNumber - rightNumber) * directionFactor;
+        }
+
+        const comparison = leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: "base" });
+        if (comparison === 0) {
+          return left.index - right.index;
+        }
+
+        return comparison * directionFactor;
+      })
+      .map((item) => item.row);
+  }, [filteredRows, sortConfig]);
+  const totalRows = sortedRows.length;
   const totalPages = Math.max(1, Math.ceil(Math.max(totalRows, 1) / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStartIndex = totalRows === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
   const pageEndIndex = Math.min(pageStartIndex + pageSize, totalRows);
-  const paginatedRows = rows.slice(pageStartIndex, pageEndIndex);
+  const paginatedRows = sortedRows.slice(pageStartIndex, pageEndIndex);
   const paginationItems = buildPaginationItems(safeCurrentPage, totalPages);
 
   const isRunning = execution?.status === "QUEUED" || execution?.status === "RUNNING";
   const isFailed = execution?.status === "FAILED";
   const isCancelled = execution?.status === "CANCELLED";
   const hasResult = Boolean(result);
-  const resultSummaryText = hasResult ? `${result!.totalRows} ta qator topildi` : null;
+  const loadedRowsCount = rows.length;
+  const resultPanelText = {
+    title: {
+      OZ: "Query natijasi",
+      UZ: "Query натижаси",
+      RU: "Результат запроса",
+      EN: "Query result",
+    },
+    foundRows: {
+      OZ: "ta qator topildi",
+      UZ: "та қатор топилди",
+      RU: "строк найдено",
+      EN: "rows found",
+    },
+    running: {
+      OZ: "Query bajarilmoqda...",
+      UZ: "Query бажарилмоқда...",
+      RU: "Запрос выполняется...",
+      EN: "Query is running...",
+    },
+    failed: {
+      OZ: "Bajarilish vaqtida xatolik yuz berdi",
+      UZ: "Бажарилиш вақтида хатолик юз берди",
+      RU: "Во время выполнения произошла ошибка",
+      EN: "An error occurred during execution",
+    },
+    cancelled: {
+      OZ: "Query foydalanuvchi tomonidan to'xtatildi",
+      UZ: "Query фойдаланувчи томонидан тўхтатилди",
+      RU: "Запрос остановлен пользователем",
+      EN: "Query was stopped by the user",
+    },
+    ready: {
+      OZ: "Natija ko'rishga tayyor",
+      UZ: "Натижа кўришга тайёр",
+      RU: "Результат готов к просмотру",
+      EN: "Result is ready to view",
+    },
+    pending: {
+      OZ: "Natija shu yerda ko'rsatiladi",
+      UZ: "Натижа шу ерда кўрсатилади",
+      RU: "Результат появится здесь",
+      EN: "Result will appear here",
+    },
+    search: {
+      OZ: "Natijadan qidiring...",
+      UZ: "Натижадан қидиринг...",
+      RU: "Поиск по результату...",
+      EN: "Search in result...",
+    },
+    clearSearch: {
+      OZ: "Qidiruvni tozalash",
+      UZ: "Қидирувни тозалаш",
+      RU: "Очистить поиск",
+      EN: "Clear search",
+    },
+    expand: {
+      OZ: "Natijani ochish",
+      UZ: "Натижани очиш",
+      RU: "Развернуть результат",
+      EN: "Expand result",
+    },
+    collapse: {
+      OZ: "Natijani yig'ish",
+      UZ: "Натижани йиғиш",
+      RU: "Свернуть результат",
+      EN: "Collapse result",
+    },
+    sqlLog: {
+      OZ: "SQL log",
+      UZ: "SQL log",
+      RU: "SQL лог",
+      EN: "SQL log",
+    },
+    queryFailed: {
+      OZ: "SQL query bajarilmadi",
+      UZ: "SQL query бажарилмади",
+      RU: "SQL-запрос не выполнен",
+      EN: "SQL query failed",
+    },
+    queryStopped: {
+      OZ: "Query to'xtatildi",
+      UZ: "Query тўхтатилди",
+      RU: "Запрос остановлен",
+      EN: "Query stopped",
+    },
+    searchNoResults: {
+      OZ: "Qidiruv bo'yicha natija topilmadi",
+      UZ: "Қидирув бўйича натижа топилмади",
+      RU: "По вашему запросу ничего не найдено",
+      EN: "No results found for the search",
+    },
+    noResults: {
+      OZ: "Natija topilmadi",
+      UZ: "Натижа топилмади",
+      RU: "Нет результатов",
+      EN: "No results found",
+    },
+    showing: {
+      OZ: "ko'rsatilmoqda",
+      UZ: "кўрсатилмоқда",
+      RU: "показано",
+      EN: "shown",
+    },
+    rows: {
+      OZ: "Qatorlar",
+      UZ: "Қаторлар",
+      RU: "Строки",
+      EN: "Rows",
+    },
+    previous: {
+      OZ: "Oldingi",
+      UZ: "Олдинги",
+      RU: "Назад",
+      EN: "Previous",
+    },
+    next: {
+      OZ: "Keyingi",
+      UZ: "Кейинги",
+      RU: "Далее",
+      EN: "Next",
+    },
+    emptyState: {
+      OZ: "RUN bosilgandan keyin natija yoki xatolik logi shu yerda chiqadi",
+      UZ: "RUN босилгандан кейин натижа ёки хатолик логи шу ерда чиқади",
+      RU: "После нажатия RUN здесь появится результат или журнал ошибки",
+      EN: "After pressing RUN, the result or error log will appear here",
+    },
+  } as const;
+  const resultSummaryText = hasResult
+    ? normalizedSearchQuery.length > 0
+      ? `${filteredRows.length} / ${loadedRowsCount} ${resultPanelText.foundRows[currentLocale]}`
+      : `${loadedRowsCount} ${resultPanelText.foundRows[currentLocale]}`
+    : null;
   const executionDurationMs = useMemo(() => {
     if (!execution?.finishedAt) {
       return null;
@@ -2986,16 +3400,14 @@ function SqlExecutionResultsPanel({
     return Math.max(1, finishedAt - startedAt);
   }, [execution?.createdAt, execution?.finishedAt, execution?.startedAt]);
   const statusText = isRunning
-    ? "Query bajarilmoqda..."
+    ? resultPanelText.running[currentLocale]
     : isFailed
-      ? "Bajarilish vaqtida xatolik yuz berdi"
+      ? resultPanelText.failed[currentLocale]
       : isCancelled
-        ? "Query foydalanuvchi tomonidan to'xtatildi"
-        : hasResult && result?.truncated
-          ? "Natija cheklangan ko'rinishda chiqarildi"
-          : !hasResult
-            ? "Natija shu yerda ko'rsatiladi"
-            : null;
+        ? resultPanelText.cancelled[currentLocale]
+        : !hasResult
+          ? resultPanelText.pending[currentLocale]
+          : null;
   const initialColumnWidths = useMemo(
     () =>
       result?.columns.map((column, index) => estimateSqlResultColumnWidth(column, rows, index)) ?? [],
@@ -3008,6 +3420,17 @@ function SqlExecutionResultsPanel({
   useEffect(() => {
     setColumnWidths(initialColumnWidths);
   }, [initialColumnWidths]);
+
+  useEffect(() => {
+    setResultSearchQuery("");
+    setSortConfig(null);
+  }, [execution?.executionId]);
+
+  useEffect(() => {
+    if (currentPage !== 1) {
+      onPageChange(1);
+    }
+  }, [normalizedSearchQuery, onPageChange]);
 
   const effectiveColumnWidths =
     result && columnWidths.length === result.columns.length ? columnWidths : initialColumnWidths;
@@ -3079,13 +3502,34 @@ function SqlExecutionResultsPanel({
     [effectiveColumnWidths],
   );
 
+  const handleSortToggle = useCallback(
+    (columnIndex: number) => {
+      setSortConfig((current) => {
+        if (!current || current.columnIndex !== columnIndex) {
+          return { columnIndex, direction: "asc" };
+        }
+
+        if (current.direction === "asc") {
+          return { columnIndex, direction: "desc" };
+        }
+
+        return null;
+      });
+
+      if (currentPage !== 1) {
+        onPageChange(1);
+      }
+    },
+    [currentPage, onPageChange],
+  );
+
   return (
     <section className="flex h-full min-h-0 flex-col border-t border-border/70 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(241,245,249,0.9))]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-5 py-3.5">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
             <Terminal className="size-4 text-primary" />
-            <span>Query natijasi</span>
+            <span>{resultPanelText.title[currentLocale]}</span>
             {resultSummaryText ? (
               <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
                 {resultSummaryText}
@@ -3100,49 +3544,72 @@ function SqlExecutionResultsPanel({
           {statusText ? <p className="text-xs text-muted-foreground">{statusText}</p> : null}
         </div>
 
-        {hasResult ? (
-          <div className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-            Sahifa: {safeCurrentPage}/{totalPages}
-          </div>
-        ) : null}
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+          {hasResult && !collapsed ? (
+            <div className="relative w-full sm:w-[290px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={resultSearchQuery}
+                onChange={(event) => setResultSearchQuery(event.target.value)}
+                placeholder={resultPanelText.search[currentLocale]}
+                className="h-9 rounded-[12px] border-border/70 bg-background pl-9 pr-10 text-sm"
+              />
+              {resultSearchQuery.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setResultSearchQuery("")}
+                  aria-label={resultPanelText.clearSearch[currentLocale]}
+                  className="absolute right-2 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {collapsible ? (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? resultPanelText.expand[currentLocale] : resultPanelText.collapse[currentLocale]}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-border/70 bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              {collapsed ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {isFailed ? (
+      {!collapsed && isFailed ? (
         <div className="px-5 py-4">
           <div className="rounded-[16px] border border-rose-200 bg-rose-50/80 px-4 py-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-rose-700">
               <AlertTriangle className="size-4" />
-              SQL log
+              {resultPanelText.sqlLog[currentLocale]}
             </div>
             <p className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-rose-800">
-              {execution?.errorMessage ?? "SQL query bajarilmadi"}
+              {execution?.errorMessage ?? resultPanelText.queryFailed[currentLocale]}
             </p>
           </div>
         </div>
-      ) : isCancelled ? (
+      ) : !collapsed && isCancelled ? (
         <div className="px-5 py-4">
           <div className="rounded-[16px] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-800">
-            {execution?.logMessage ?? "Query to'xtatildi"}
+            {execution?.logMessage ?? resultPanelText.queryStopped[currentLocale]}
           </div>
         </div>
-      ) : isRunning ? (
+      ) : !collapsed && isRunning ? (
         <div className="flex min-h-0 flex-1 items-center justify-center px-5 py-6">
           <div className="flex items-center gap-3 rounded-full border border-border/70 bg-background px-4 py-2.5 text-sm font-medium text-foreground shadow-sm">
             <LoaderCircle className="size-4 animate-spin text-primary" />
-            <span>{execution?.logMessage ?? "Query bajarilmoqda"}</span>
+            <span>{execution?.logMessage ?? resultPanelText.running[currentLocale]}</span>
           </div>
         </div>
-      ) : hasResult ? (
+      ) : !collapsed && hasResult ? (
         <>
-          <div
-            className="min-h-0 flex-1 overflow-auto select-none"
-            onCopy={(event) => event.preventDefault()}
-            onCut={(event) => event.preventDefault()}
-            onContextMenu={(event) => event.preventDefault()}
-          >
+          <div className="min-h-0 flex-1 overflow-auto">
             <div className="min-h-0 h-full overflow-auto border-y border-border/70">
               <table
-                className="w-max min-w-full table-fixed border-separate border-spacing-0 caption-bottom text-sm select-none"
+                className="w-max min-w-full table-fixed border-separate border-spacing-0 caption-bottom text-sm"
                 style={totalTableWidth > 0 ? { width: totalTableWidth } : undefined}
               >
                 <thead className="[&_tr]:border-b">
@@ -3167,8 +3634,30 @@ function SqlExecutionResultsPanel({
                         }}
                         className="sticky top-0 z-10 h-11 whitespace-nowrap border-b border-r border-border bg-[rgba(248,250,252,0.98)] px-4 text-left align-middle text-[12px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-[0_1px_0_0_var(--border)] backdrop-blur first:border-l"
                       >
-                        <div className="group relative flex h-full items-center pr-3">
-                          <span className="block min-w-0 truncate">{column}</span>
+                        <div className="group relative flex h-full items-center gap-2 pr-3">
+                          <button
+                            type="button"
+                            onClick={() => handleSortToggle(index)}
+                            className="inline-flex min-w-0 flex-1 items-center gap-1 text-left text-inherit transition hover:text-foreground"
+                            title={
+                              sortConfig?.columnIndex === index
+                                ? sortConfig.direction === "asc"
+                                  ? `${column} bo'yicha kamayish tartibida saralash`
+                                  : `${column} bo'yicha saralashni bekor qilish`
+                                : `${column} bo'yicha o'sish tartibida saralash`
+                            }
+                          >
+                            <span className="block min-w-0 truncate">{column}</span>
+                            {sortConfig?.columnIndex === index ? (
+                              sortConfig.direction === "asc" ? (
+                                <ArrowUp className="size-3.5 shrink-0 text-primary" />
+                              ) : (
+                                <ArrowDown className="size-3.5 shrink-0 text-primary" />
+                              )
+                            ) : (
+                              <ArrowUpDown className="size-3.5 shrink-0 text-muted-foreground/70" />
+                            )}
+                          </button>
                           <button
                             type="button"
                             aria-label={`${column} ustuni eni`}
@@ -3194,7 +3683,7 @@ function SqlExecutionResultsPanel({
                         colSpan={Math.max(result!.columns.length + 1, 1)}
                         className="p-4 py-8 text-center align-middle text-sm text-muted-foreground"
                       >
-                        Natija topilmadi
+                        {normalizedSearchQuery.length > 0 ? resultPanelText.searchNoResults[currentLocale] : resultPanelText.noResults[currentLocale]}
                       </td>
                     </tr>
                   ) : (
@@ -3221,7 +3710,7 @@ function SqlExecutionResultsPanel({
                               minWidth: effectiveColumnWidths[columnIndex],
                               maxWidth: effectiveColumnWidths[columnIndex],
                             }}
-                            className="whitespace-nowrap border-r border-border px-4 py-2.5 align-top text-sm select-none first:border-l"
+                            className="whitespace-nowrap border-r border-border px-4 py-2.5 align-top text-sm first:border-l"
                             title={row[columnIndex] ?? ""}
                           >
                             <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
@@ -3241,11 +3730,11 @@ function SqlExecutionResultsPanel({
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-sm text-muted-foreground">
                 {totalRows === 0
-                  ? "0 / 0 ko'rsatilmoqda"
-                  : `${pageStartIndex + 1}-${pageEndIndex} / ${totalRows} ko'rsatilmoqda`}
+                  ? `0 / 0 ${resultPanelText.showing[currentLocale]}`
+                  : `${pageStartIndex + 1}-${pageEndIndex} / ${totalRows} ${resultPanelText.showing[currentLocale]}`}
               </p>
               <label className="flex h-8 items-center gap-2 rounded-[10px] border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground">
-                <span>Qatorlar</span>
+                <span>{resultPanelText.rows[currentLocale]}</span>
                 <select
                   value={pageSize}
                   onChange={(event) => onPageSizeChange(Number(event.target.value))}
@@ -3267,7 +3756,7 @@ function SqlExecutionResultsPanel({
                 className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronLeft className="size-3.5" />
-                Oldingi
+                {resultPanelText.previous[currentLocale]}
               </button>
               <div className="flex flex-wrap items-center gap-1">
                 {paginationItems.map((item, index) =>
@@ -3301,7 +3790,7 @@ function SqlExecutionResultsPanel({
                 disabled={safeCurrentPage === totalPages}
                 className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Keyingi
+                {resultPanelText.next[currentLocale]}
                 <ChevronRight className="size-3.5" />
               </button>
             </div>
@@ -3310,7 +3799,7 @@ function SqlExecutionResultsPanel({
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-5 py-6">
           <div className="rounded-[18px] border border-dashed border-border/80 bg-background/70 px-5 py-4 text-center text-sm text-muted-foreground">
-            RUN bosilgandan keyin natija yoki xatolik logi shu yerda chiqadi
+            {resultPanelText.emptyState[currentLocale]}
           </div>
         </div>
       )}
@@ -3378,6 +3867,7 @@ function SqlCodeEditorSurface({
   textareaRef,
   toolbarLeadingActions,
   toolbarActions,
+  hideHeader = false,
   autoFocus = false,
   onRunShortcut,
   autocompleteClassifierTables = [],
@@ -3386,6 +3876,7 @@ function SqlCodeEditorSurface({
   autocompleteSchemaName = "etranzit",
   selectedColumnDragContextId,
   disallowSelectedColumnSelfDrop = false,
+  onEditorFocusChange,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -3405,6 +3896,7 @@ function SqlCodeEditorSurface({
   textareaRef?: MutableRefObject<HTMLTextAreaElement | null>;
   toolbarLeadingActions?: ReactNode;
   toolbarActions?: ReactNode;
+  hideHeader?: boolean;
   autoFocus?: boolean;
   onRunShortcut?: (() => void) | null;
   autocompleteClassifierTables?: ClassifierTable[];
@@ -3413,7 +3905,10 @@ function SqlCodeEditorSurface({
   autocompleteSchemaName?: string;
   selectedColumnDragContextId?: string;
   disallowSelectedColumnSelfDrop?: boolean;
+  onEditorFocusChange?: (focused: boolean) => void;
 }) {
+  const { i18n } = useTranslation();
+  const currentLocale = resolveLocaleCode(i18n.language);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const editorPaneRef = useRef<HTMLDivElement | null>(null);
@@ -3424,6 +3919,26 @@ function SqlCodeEditorSurface({
   const lineCount = useMemo(() => Math.max(value.split("\n").length, 1), [value]);
   const [isResizingColumnsPanel, setIsResizingColumnsPanel] = useState(false);
   const [autocompleteState, setAutocompleteState] = useState<SqlAutocompleteMenuState | null>(null);
+  const surfaceText = {
+    format: {
+      OZ: "Format",
+      UZ: "Формат",
+      RU: "Формат",
+      EN: "Format",
+    },
+    formatTitle: {
+      OZ: "Format qilish (Ctrl+Shift+F)",
+      UZ: "Формат қилиш (Ctrl+Shift+F)",
+      RU: "Форматировать (Ctrl+Shift+F)",
+      EN: "Format (Ctrl+Shift+F)",
+    },
+    columnPanelWidth: {
+      OZ: "Ustunlar paneli eni",
+      UZ: "Устунлар панели эни",
+      RU: "Ширина панели колонок",
+      EN: "Column panel width",
+    },
+  } as const;
 
   const clampColumnsPanelWidth = useCallback((nextWidth: number) => {
     const containerWidth = bodyRef.current?.clientWidth ?? 0;
@@ -3537,8 +4052,11 @@ function SqlCodeEditorSurface({
         return;
       }
 
-      const nextValue = `${value.slice(0, autocompleteState.replaceStart)}${suggestion.insertText}${value.slice(autocompleteState.replaceEnd)}`;
-      const nextCaretPosition = autocompleteState.replaceStart + suggestion.insertText.length;
+      const rawNextValue = `${value.slice(0, autocompleteState.replaceStart)}${suggestion.insertText}${value.slice(autocompleteState.replaceEnd)}`;
+      const nextValue = sanitizeSqlEditorValue(rawNextValue);
+      const nextCaretPosition = sanitizeSqlEditorValue(
+        rawNextValue.slice(0, autocompleteState.replaceStart + suggestion.insertText.length),
+      ).length;
 
       onChange(nextValue);
       setAutocompleteState(null);
@@ -3581,8 +4099,22 @@ function SqlCodeEditorSurface({
   const handleTextareaChange = useCallback(
     (event: ReactChangeEvent<HTMLTextAreaElement>) => {
       const target = event.currentTarget;
-      const nextValue = target.value;
+      const nextValue = sanitizeSqlEditorValue(target.value);
+      const nextSelectionStart = sanitizeSqlEditorValue(target.value.slice(0, target.selectionStart ?? 0)).length;
+      const nextSelectionEnd = sanitizeSqlEditorValue(target.value.slice(0, target.selectionEnd ?? 0)).length;
       onChange(nextValue);
+
+      if (nextValue !== target.value) {
+        requestAnimationFrame(() => {
+          const textarea = localTextareaRef.current;
+          if (!textarea) {
+            return;
+          }
+
+          textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd);
+          syncScrollPositions(textarea);
+        });
+      }
 
       if (!autocompleteState) {
         return;
@@ -3596,7 +4128,7 @@ function SqlCodeEditorSurface({
   );
 
   const handleFormatClick = useCallback(() => {
-    const formattedValue = formatSqlScript(value);
+    const formattedValue = sanitizeSqlEditorValue(formatSqlScript(value));
     onChange(formattedValue);
     closeAutocomplete();
 
@@ -3613,6 +4145,17 @@ function SqlCodeEditorSurface({
 
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key.length === 1 &&
+        !SQL_EDITOR_ALLOWED_CHARACTER_REGEX.test(event.key)
+      ) {
+        event.preventDefault();
+        return;
+      }
+
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
         handleFormatClick();
@@ -3666,8 +4209,9 @@ function SqlCodeEditorSurface({
 
       event.preventDefault();
       const target = event.currentTarget;
-      const nextValue = `${value.slice(0, target.selectionStart)}  ${value.slice(target.selectionEnd)}`;
-      const nextCaretPosition = target.selectionStart + 2;
+      const rawNextValue = `${value.slice(0, target.selectionStart)}  ${value.slice(target.selectionEnd)}`;
+      const nextValue = sanitizeSqlEditorValue(rawNextValue);
+      const nextCaretPosition = sanitizeSqlEditorValue(rawNextValue.slice(0, target.selectionStart + 2)).length;
       onChange(nextValue);
 
       requestAnimationFrame(() => {
@@ -3700,8 +4244,11 @@ function SqlCodeEditorSurface({
       const insertionStart = mode === "append-end" ? value.length : (textarea.selectionStart ?? value.length);
       const insertionEnd = mode === "append-end" ? value.length : (textarea.selectionEnd ?? insertionStart);
       const separator = mode === "append-end" && value.length > 0 && !/\s$/.test(value) ? " " : "";
-      const nextValue = `${value.slice(0, insertionStart)}${separator}${text}${value.slice(insertionEnd)}`;
-      const nextCaretPosition = insertionStart + separator.length + text.length;
+      const rawNextValue = `${value.slice(0, insertionStart)}${separator}${text}${value.slice(insertionEnd)}`;
+      const nextValue = sanitizeSqlEditorValue(rawNextValue);
+      const nextCaretPosition = sanitizeSqlEditorValue(
+        rawNextValue.slice(0, insertionStart + separator.length + text.length),
+      ).length;
 
       onChange(nextValue);
 
@@ -3849,38 +4396,40 @@ function SqlCodeEditorSurface({
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2.5">
-        {headerContent ? (
-          <div
-            onPointerDown={headerDragHandleProps?.onPointerDown}
-            title={headerDragHandleProps?.title}
-            className={cn(
-              "min-w-0 flex items-center",
-              headerDragHandleProps?.onPointerDown &&
-                "flex-1 self-stretch rounded-[10px] px-1 cursor-grab active:cursor-grabbing select-none touch-none transition-colors hover:bg-muted/45",
-              headerDragHandleProps?.className,
-            )}
-          >
-            {headerContent}
+      {!hideHeader ? (
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2.5">
+          {headerContent ? (
+            <div
+              onPointerDown={headerDragHandleProps?.onPointerDown}
+              title={headerDragHandleProps?.title}
+              className={cn(
+                "min-w-0 flex items-center",
+                headerDragHandleProps?.onPointerDown &&
+                  "flex-1 self-stretch rounded-[10px] px-1 cursor-grab active:cursor-grabbing select-none touch-none transition-colors hover:bg-muted/45",
+                headerDragHandleProps?.className,
+              )}
+            >
+              {headerContent}
+            </div>
+          ) : headerLabel ? (
+            <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">{headerLabel}</span>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-2">
+            {toolbarLeadingActions}
+            <button
+              type="button"
+              onClick={handleFormatClick}
+              title={surfaceText.formatTitle[currentLocale]}
+              className="nodrag nopan nowheel inline-flex h-8 items-center justify-center rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted"
+            >
+              {surfaceText.format[currentLocale]}
+            </button>
+            {toolbarActions}
           </div>
-        ) : headerLabel ? (
-          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">{headerLabel}</span>
-        ) : (
-          <span />
-        )}
-        <div className="flex items-center gap-2">
-          {toolbarLeadingActions}
-          <button
-            type="button"
-            onClick={handleFormatClick}
-            title="Format qilish (Ctrl+Shift+F)"
-            className="nodrag nopan nowheel inline-flex h-8 items-center justify-center rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted"
-          >
-            Format
-          </button>
-          {toolbarActions}
         </div>
-      </div>
+      ) : null}
 
       <div ref={bodyRef} className={cn("flex min-h-0 flex-col flex-1 lg:flex-row", minHeightClassName)}>
         <div ref={editorPaneRef} className="relative min-h-0 flex-1">
@@ -3912,6 +4461,8 @@ function SqlCodeEditorSurface({
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
+              onFocus={() => onEditorFocusChange?.(true)}
+              onBlur={() => onEditorFocusChange?.(false)}
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
               onDragOver={handleTextDragOver}
@@ -3958,15 +4509,16 @@ function SqlCodeEditorSurface({
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => applyAutocompleteSuggestion(suggestion)}
                             className={cn(
-                              "flex w-full items-center rounded-[10px] border px-3 py-2 text-left transition",
+                              "flex w-full items-center justify-between gap-3 rounded-[10px] border px-3 py-2 text-left transition",
                               isActive
                                 ? "border-primary/35 bg-primary/8"
                                 : "border-border/70 bg-background hover:border-primary/20 hover:bg-primary/5",
                             )}
                           >
-                            <span className="block min-w-0 truncate text-sm font-medium text-foreground">
-                              {suggestion.label}
-                            </span>
+                            <span className="block min-w-0 truncate text-sm font-medium text-foreground">{suggestion.label}</span>
+                            {suggestion.hint ? (
+                              <span className="shrink-0 text-xs font-medium text-muted-foreground">{suggestion.hint}</span>
+                            ) : null}
                           </button>
                         );
                       })}
@@ -3983,7 +4535,7 @@ function SqlCodeEditorSurface({
             <div
               role="separator"
               aria-orientation="vertical"
-              aria-label="Column panel eni"
+              aria-label={surfaceText.columnPanelWidth[currentLocale]}
               onPointerDown={handleColumnsResizeStart}
               className={cn(
                 "relative hidden w-4 shrink-0 cursor-col-resize touch-none items-stretch justify-center bg-background/55 transition lg:flex",
@@ -4011,26 +4563,12 @@ function SqlCodeEditorSurface({
   );
 }
 
-export function SqlCodeEditor({
-  value,
-  onChange,
-  placeholder,
-  className,
-  headerLabel = "SQL Script",
-  headerContent,
-  headerDragHandleProps,
-  minHeightClassName = "min-h-[560px]",
-  toolbarLeadingActions,
-  showSelectedColumnsPanel = false,
-  selectedColumnsPanelWidth = 220,
-  onSelectedColumnsPanelWidthChange,
-  queryExecutionContext,
-  pendingInsertion,
-  onInsertionHandled,
-  getSelectedColumnDragText,
-  selectedColumnDragContextId,
-  disallowSelectedColumnSelfDrop = false,
-}: {
+export type SqlCodeEditorHandle = {
+  expand: () => void;
+  collapse: () => void;
+};
+
+type SqlCodeEditorProps = {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
@@ -4053,7 +4591,34 @@ export function SqlCodeEditor({
   getSelectedColumnDragText?: (column: SqlProjectionColumn) => string;
   selectedColumnDragContextId?: string;
   disallowSelectedColumnSelfDrop?: boolean;
-}) {
+  onEditorFocusChange?: (focused: boolean) => void;
+  hideInlineHeader?: boolean;
+};
+
+export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, SqlCodeEditorProps>(function SqlCodeEditor({
+  value,
+  onChange,
+  placeholder,
+  className,
+  headerLabel,
+  headerContent,
+  headerDragHandleProps,
+  minHeightClassName = "min-h-[560px]",
+  toolbarLeadingActions,
+  showSelectedColumnsPanel = false,
+  selectedColumnsPanelWidth = 220,
+  onSelectedColumnsPanelWidthChange,
+  queryExecutionContext,
+  pendingInsertion,
+  onInsertionHandled,
+  getSelectedColumnDragText,
+  selectedColumnDragContextId,
+  disallowSelectedColumnSelfDrop = false,
+  onEditorFocusChange,
+  hideInlineHeader = false,
+}: SqlCodeEditorProps, ref) {
+  const { i18n } = useTranslation();
+  const currentLocale = resolveLocaleCode(i18n.language);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inlineTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const expandedTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -4068,6 +4633,7 @@ export function SqlCodeEditor({
   const [internalSelectedColumnsPanelWidth, setInternalSelectedColumnsPanelWidth] = useState(selectedColumnsPanelWidth);
   const [execution, setExecution] = useState<SqlQueryExecutionStatusResponse | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const [isExecutionPanelCollapsed, setIsExecutionPanelCollapsed] = useState(false);
   const [resultPage, setResultPage] = useState(1);
   const [resultPageSize, setResultPageSize] = useState<number>(10);
   const selectProjection = useMemo(() => extractSelectProjectionColumns(value), [value]);
@@ -4092,16 +4658,97 @@ export function SqlCodeEditor({
   const autocompleteSchemaName = queryExecutionContext?.autocompleteSchemaName?.trim() || "etranzit";
   const executionRequestKey = `${normalizedExecutionServerName}::${value}`;
   const isExecutionRunning = execution?.status === "QUEUED" || execution?.status === "RUNNING";
+  const editorText = {
+    sqlScript: {
+      OZ: "SQL Script",
+      UZ: "SQL Script",
+      RU: "SQL Script",
+      EN: "SQL Script",
+    },
+    noSql: {
+      OZ: "SQL query kiritilmagan",
+      UZ: "SQL query киритилмаган",
+      RU: "SQL-запрос не указан",
+      EN: "SQL query is empty",
+    },
+    noServer: {
+      OZ: "Server tanlanmagan",
+      UZ: "Сервер танланмаган",
+      RU: "Сервер не выбран",
+      EN: "Server is not selected",
+    },
+    onlyServer: {
+      OZ: "Hozircha faqat {{server}} serveri bilan ishlaydi",
+      UZ: "Ҳозирча фақат {{server}} сервери билан ишлайди",
+      RU: "Пока работает только с сервером {{server}}",
+      EN: "Currently works only with {{server}} server",
+    },
+    expand: {
+      OZ: "Kattalashtirish",
+      UZ: "Катталаштириш",
+      RU: "Развернуть",
+      EN: "Expand",
+    },
+    collapse: {
+      OZ: "Kichraytirish",
+      UZ: "Кичрайтириш",
+      RU: "Свернуть",
+      EN: "Collapse",
+    },
+    serverPlaceholder: {
+      OZ: "Serverni tanlang",
+      UZ: "Серверни танланг",
+      RU: "Выберите сервер",
+      EN: "Select server",
+    },
+    runningTitle: {
+      OZ: "Query bajarilmoqda • Ctrl+Enter",
+      UZ: "Query бажарилмоқда • Ctrl+Enter",
+      RU: "Запрос выполняется • Ctrl+Enter",
+      EN: "Query is running • Ctrl+Enter",
+    },
+    runTitle: {
+      OZ: "Queryni ishga tushirish (Ctrl+Enter)",
+      UZ: "Queryни ишга тушириш (Ctrl+Enter)",
+      RU: "Запустить запрос (Ctrl+Enter)",
+      EN: "Run query (Ctrl+Enter)",
+    },
+    running: {
+      OZ: "Query bajarilmoqda",
+      UZ: "Query бажарилмоқда",
+      RU: "Запрос выполняется",
+      EN: "Query is running",
+    },
+    failed: {
+      OZ: "SQL query bajarilmadi",
+      UZ: "SQL query бажарилмади",
+      RU: "SQL-запрос не выполнен",
+      EN: "SQL query failed",
+    },
+    closeEditor: {
+      OZ: "SQL editorni yopish",
+      UZ: "SQL editorни ёпиш",
+      RU: "Закрыть SQL-редактор",
+      EN: "Close SQL editor",
+    },
+    editorDialog: {
+      OZ: "SQL query editor",
+      UZ: "SQL query editor",
+      RU: "SQL-редактор запроса",
+      EN: "SQL query editor",
+    },
+  } as const;
   const canStopExecution =
     isExecutionRunning && (Boolean(queryExecutionContext?.cancelExecution) || Boolean(execution?.stopAvailable));
+  const resolvedHeaderLabel = headerLabel ?? editorText.sqlScript[currentLocale];
   const runDisabledReason = !queryExecutionContext
     ? null
     : value.trim().length === 0
-      ? "SQL query kiritilmagan"
+      ? editorText.noSql[currentLocale]
       : normalizedExecutionServerName.length === 0
-        ? "Server tanlanmagan"
+        ? editorText.noServer[currentLocale]
         : normalizedExecutionServerName.toLowerCase() !== supportedExecutionServerName.toLowerCase()
-          ? `Hozircha faqat ${supportedExecutionServerName} serveri bilan ishlaydi`
+          ? editorText.onlyServer[currentLocale].replace("{{server}}", supportedExecutionServerName)
           : null;
 
   const clearPollTimer = useCallback(() => {
@@ -4122,19 +4769,6 @@ export function SqlCodeEditor({
   useEffect(() => {
     return () => clearPollTimer();
   }, [clearPollTimer]);
-
-  useEffect(() => {
-    if (isExecutionRunning) {
-      return;
-    }
-
-    if (lastExecutedKeyRef.current && lastExecutedKeyRef.current !== executionRequestKey) {
-      setExecution(null);
-      setExecutionError(null);
-      setResultPage(1);
-      lastExecutedKeyRef.current = null;
-    }
-  }, [executionRequestKey, isExecutionRunning]);
 
   useEffect(() => {
     if (!pendingInsertion || handledInsertionIdRef.current === pendingInsertion.id) {
@@ -4188,7 +4822,7 @@ export function SqlCodeEditor({
             ? {
                 ...current,
                 status: "FAILED",
-                logMessage: "SQL query bajarilmadi",
+                logMessage: editorText.failed[currentLocale],
                 errorMessage: message,
                 stopAvailable: false,
                 finishedAt: new Date().toISOString(),
@@ -4216,6 +4850,7 @@ export function SqlCodeEditor({
 
     clearPollTimer();
     setExecutionError(null);
+    setIsExecutionPanelCollapsed(false);
     setResultPage(1);
 
     try {
@@ -4225,7 +4860,7 @@ export function SqlCodeEditor({
           executionId: placeholderExecutionId,
           status: "RUNNING",
           serverName: normalizedExecutionServerName,
-          logMessage: "Query bajarilmoqda",
+          logMessage: editorText.running[currentLocale],
           errorMessage: null,
           stopAvailable: false,
           createdAt: new Date().toISOString(),
@@ -4381,6 +5016,15 @@ export function SqlCodeEditor({
     return () => cancelAnimationFrame(frameId);
   }, [isExpanded]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      expand: handleExpand,
+      collapse: handleCollapse,
+    }),
+    [handleCollapse, handleExpand],
+  );
+
   const inlineToolbarButton = (
     <button
       type="button"
@@ -4388,27 +5032,19 @@ export function SqlCodeEditor({
       className="nodrag nopan nowheel inline-flex h-8 items-center justify-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted"
     >
       <Maximize2 className="size-3.5" />
-      Kattalashtirish
+      {editorText.expand[currentLocale]}
     </button>
   );
 
   const expandedServerSelect = queryExecutionContext ? (
-    <label className="nodrag nopan nowheel flex h-8 min-w-[220px] items-center gap-2 rounded-[10px] border border-border bg-background px-2.5">
-      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Server</span>
-      <select
-        value={normalizedExecutionServerName}
-        onChange={(event) => queryExecutionContext.onServerNameChange?.(event.target.value)}
-        disabled={!queryExecutionContext.onServerNameChange || executionServerOptions.length === 0 || isExecutionRunning}
-        className="h-full min-w-0 flex-1 bg-transparent text-xs font-medium text-foreground outline-none disabled:cursor-not-allowed disabled:text-muted-foreground"
-      >
-        <option value="">{queryExecutionContext.serverPlaceholder ?? "Serverni tanlang"}</option>
-        {executionServerOptions.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
+    <SqlExecutionServerAutocomplete
+      value={normalizedExecutionServerName}
+      onChange={queryExecutionContext.onServerNameChange}
+      options={executionServerOptions}
+      placeholder={queryExecutionContext.serverPlaceholder ?? editorText.serverPlaceholder[currentLocale]}
+      disabled={!queryExecutionContext.onServerNameChange || executionServerOptions.length === 0 || isExecutionRunning}
+      compact
+    />
   ) : null;
 
   const expandedExecutionActions = queryExecutionContext ? (
@@ -4421,10 +5057,10 @@ export function SqlCodeEditor({
         disabled={Boolean(runDisabledReason) || isExecutionRunning}
         title={
           isExecutionRunning
-            ? "Query bajarilmoqda • Ctrl+Enter"
+            ? editorText.runningTitle[currentLocale]
             : runDisabledReason
               ? `${runDisabledReason} • Ctrl+Enter`
-              : "Queryni ishga tushirish (Ctrl+Enter)"
+              : editorText.runTitle[currentLocale]
         }
         className="nodrag nopan nowheel inline-flex h-8 items-center justify-center gap-1.5 rounded-[10px] border border-emerald-200 bg-emerald-50/90 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-55"
       >
@@ -4452,7 +5088,7 @@ export function SqlCodeEditor({
       className="nodrag nopan nowheel inline-flex h-8 items-center justify-center gap-1.5 rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-muted"
     >
       <Minimize2 className="size-3.5" />
-      Kichraytirish
+      {editorText.collapse[currentLocale]}
     </button>
   );
 
@@ -4461,7 +5097,7 @@ export function SqlCodeEditor({
         executionId: "sql-runner-error",
         status: "FAILED",
         serverName: normalizedExecutionServerName,
-        logMessage: "SQL query bajarilmadi",
+        logMessage: editorText.failed[currentLocale],
         errorMessage: executionError,
         stopAvailable: false,
         createdAt: new Date().toISOString(),
@@ -4473,6 +5109,12 @@ export function SqlCodeEditor({
   const shouldShowExecutionPanel = isExpanded && Boolean(queryExecutionContext) && Boolean(displayExecution);
   const fallbackOriginFrame = originFrame ?? measureSqlEditorFrame(rootRef.current) ?? getSqlEditorExpandedFrame();
 
+  useEffect(() => {
+    if (!shouldShowExecutionPanel) {
+      setIsExecutionPanelCollapsed(false);
+    }
+  }, [shouldShowExecutionPanel]);
+
   return (
     <>
       <div ref={rootRef} className="relative">
@@ -4481,7 +5123,7 @@ export function SqlCodeEditor({
           onChange={onChange}
           placeholder={placeholder}
           className={cn(className, isExpanded && "invisible pointer-events-none")}
-          headerLabel={headerLabel}
+          headerLabel={resolvedHeaderLabel}
           headerContent={headerContent}
           headerDragHandleProps={headerDragHandleProps}
           minHeightClassName={minHeightClassName}
@@ -4489,14 +5131,16 @@ export function SqlCodeEditor({
           selectedColumnsPanelWidth={effectiveSelectedColumnsPanelWidth}
           onSelectedColumnsPanelWidthChange={onSelectedColumnsPanelWidthChange ?? setInternalSelectedColumnsPanelWidth}
           textareaRef={inlineTextareaRef}
-          toolbarLeadingActions={toolbarLeadingActions}
-          toolbarActions={inlineToolbarButton}
+          toolbarLeadingActions={hideInlineHeader ? null : toolbarLeadingActions}
+          toolbarActions={hideInlineHeader ? null : inlineToolbarButton}
+          hideHeader={hideInlineHeader}
           autocompleteClassifierTables={autocompleteClassifierTables}
           autocompleteServerName={normalizedExecutionServerName}
           autocompleteSupportedServerName={supportedExecutionServerName}
           autocompleteSchemaName={autocompleteSchemaName}
           selectedColumnDragContextId={selectedColumnDragContextId}
           disallowSelectedColumnSelfDrop={disallowSelectedColumnSelfDrop}
+          onEditorFocusChange={onEditorFocusChange}
         />
       </div>
 
@@ -4512,14 +5156,14 @@ export function SqlCodeEditor({
                 >
                   <button
                     type="button"
-                    aria-label="SQL editorni yopish"
+                    aria-label={editorText.closeEditor[currentLocale]}
                     className="absolute inset-0 bg-slate-950/32 backdrop-blur-sm"
                     onClick={handleCollapse}
                   />
                   <motion.div
                     role="dialog"
                     aria-modal="true"
-                    aria-label="SQL query editor"
+                    aria-label={editorText.editorDialog[currentLocale]}
                     className="fixed overflow-hidden rounded-[24px] shadow-[0_34px_90px_-30px_rgba(15,23,42,0.42)]"
                     initial={fallbackOriginFrame}
                     animate={expandedFrame}
@@ -4533,9 +5177,13 @@ export function SqlCodeEditor({
                         placeholder={placeholder}
                         className={cn(
                           "min-h-0 border-0 rounded-none shadow-none",
-                          shouldShowExecutionPanel ? "h-[52%]" : "h-full",
+                          shouldShowExecutionPanel
+                            ? isExecutionPanelCollapsed
+                              ? "flex-1"
+                              : "h-[52%]"
+                            : "h-full",
                         )}
-                        headerLabel={headerLabel}
+                        headerLabel={resolvedHeaderLabel}
                         headerContent={headerContent}
                         headerDragHandleProps={headerDragHandleProps}
                         minHeightClassName="min-h-0"
@@ -4567,9 +5215,10 @@ export function SqlCodeEditor({
                         autocompleteSchemaName={autocompleteSchemaName}
                         selectedColumnDragContextId={selectedColumnDragContextId}
                         disallowSelectedColumnSelfDrop={disallowSelectedColumnSelfDrop}
+                        onEditorFocusChange={onEditorFocusChange}
                       />
                       {shouldShowExecutionPanel ? (
-                        <div className="h-[46%] min-h-0 shrink-0">
+                        <div className={cn("min-h-0 shrink-0", isExecutionPanelCollapsed ? "h-[78px]" : "h-[46%]")}>
                           <SqlExecutionResultsPanel
                             execution={displayExecution}
                             pageSize={resultPageSize}
@@ -4579,6 +5228,9 @@ export function SqlCodeEditor({
                               setResultPageSize(nextPageSize);
                               setResultPage(1);
                             }}
+                            collapsible
+                            collapsed={isExecutionPanelCollapsed}
+                            onToggleCollapsed={() => setIsExecutionPanelCollapsed((current) => !current)}
                           />
                         </div>
                       ) : null}
@@ -4592,7 +5244,7 @@ export function SqlCodeEditor({
         : null}
     </>
   );
-}
+});
 
 function NotifyEditorSection({
   notifyMessages,
@@ -5637,3 +6289,5 @@ export function RuleCanvasEditor({
     </ReactFlowProvider>
   );
 }
+
+

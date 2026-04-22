@@ -14,6 +14,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 @Getter
 @Setter
@@ -22,7 +24,9 @@ import lombok.Setter;
 @AllArgsConstructor
 @Entity
 @Table(name = "app_users")
-public class UserEntity extends BaseEntity {
+@SQLDelete(sql = "update app_users set isdeleted = 1, deltime = current timestamp, updtime = current timestamp where id = ? and isdeleted = 0")
+@SQLRestriction("isdeleted = 0")
+public class UserEntity extends AuditedUuidEntity {
 
     @Column(nullable = false, unique = true, length = 60)
     private String username;
@@ -35,7 +39,7 @@ public class UserEntity extends BaseEntity {
 
     @Column(nullable = false, length = 16)
     @Builder.Default
-    private String locale = "uz-Latn";
+    private String locale = "OZ";
 
     @Column(nullable = false)
     @Builder.Default

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -130,6 +131,60 @@ public class ClassifierController {
         @Valid @RequestBody ClassifierDtos.ServerRequest request
     ) {
         return ResponseEntity.ok(classifierService.createServer(request));
+    }
+
+    @GetMapping("/roles")
+    public ResponseEntity<List<ClassifierDtos.RoleItem>> listRoles() {
+        return ResponseEntity.ok(classifierService.listRoles());
+    }
+
+    @PostMapping("/roles")
+    public ResponseEntity<ClassifierDtos.RoleItem> createRole(
+        @Valid @RequestBody ClassifierDtos.RoleRequest request
+    ) {
+        return ResponseEntity.ok(classifierService.createRole(request));
+    }
+
+    @GetMapping("/states")
+    public ResponseEntity<List<ClassifierDtos.StateItem>> listStates(
+        @RequestParam(value = "lang", required = false) String lang
+    ) {
+        return ResponseEntity.ok(classifierService.listStates(lang));
+    }
+
+    @PostMapping("/states")
+    public ResponseEntity<ClassifierDtos.StateItem> createState(
+        @Valid @RequestBody ClassifierDtos.StateRequest request
+    ) {
+        return ResponseEntity.ok(classifierService.createState(request));
+    }
+
+    @PutMapping("/states/{id}")
+    public ResponseEntity<ClassifierDtos.StateItem> updateState(
+        @PathVariable("id") UUID id,
+        @Valid @RequestBody ClassifierDtos.StateRequest request
+    ) {
+        return ResponseEntity.ok(classifierService.updateState(id, request));
+    }
+
+    @DeleteMapping("/states/{id}")
+    public ResponseEntity<Void> deleteState(@PathVariable("id") UUID id) {
+        classifierService.deleteState(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/roles/{id}")
+    public ResponseEntity<ClassifierDtos.RoleItem> updateRole(
+        @PathVariable("id") UUID id,
+        @Valid @RequestBody ClassifierDtos.RoleRequest request
+    ) {
+        return ResponseEntity.ok(classifierService.updateRole(id, request));
+    }
+
+    @DeleteMapping("/roles/{id}")
+    public ResponseEntity<Void> deleteRole(@PathVariable("id") UUID id) {
+        classifierService.deleteRole(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/servers/{id}")
